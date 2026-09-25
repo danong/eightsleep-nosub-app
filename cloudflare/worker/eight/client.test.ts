@@ -60,6 +60,28 @@ test("login and refresh return stored token fields and use the expected grants",
   assert.equal(requests[1]?.body.refresh_token, "r2");
 });
 
+test("default fetch is called with the Workers global receiver", async () => {
+  const originalFetch = globalThis.fetch;
+  let receiver: unknown;
+  globalThis.fetch = (function (this: unknown) {
+    receiver = this;
+    return Promise.resolve(
+      jsonResponse({
+        access_token: "access",
+        refresh_token: "refresh",
+        expires_in: 3600,
+        userId: "user-1",
+      }),
+    );
+  } as typeof fetch);
+  try {
+    await new EightClient().login("person@example.com", "pw");
+    assert.equal(receiver, globalThis);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("heating status selects the requested user side, with legacy solo behavior", async () => {
   for (const [requestedSide, expectedSide, expectedLevel] of [
     ["left", "left", 7],

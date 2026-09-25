@@ -29,7 +29,9 @@ export class EightClient {
   private readonly timeoutMs: number;
 
   constructor(options: EightClientOptions = {}) {
-    this.requestFetch = options.fetch ?? fetch;
+    // Workers' runtime fetch relies on its global receiver. Storing bare
+    // `fetch` and later calling it as a client method loses that receiver.
+    this.requestFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.timeoutMs = options.timeoutMs ?? 12_000;
   }
 

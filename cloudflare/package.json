@@ -1,0 +1,21 @@
+{
+  "name": "eight-sleep-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "test": "node --experimental-strip-types --test worker/schedule/engine.test.ts worker/eight/client.test.ts worker/secrets.test.ts worker/http/validation.test.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write 'worker/**/*.ts' ui/index.html ui/styles.css && prettier --write ui/app.js.txt --parser babel",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply eight-sleep --local",
+    "db:remote": "wrangler d1 migrations apply eight-sleep --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260925.2",
+    "@types/node": "^26.6.2",
+    "prettier": "^3.9.9",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.140.0"
+  }
+}

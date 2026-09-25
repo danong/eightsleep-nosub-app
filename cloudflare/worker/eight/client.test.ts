@@ -101,6 +101,16 @@ test("GET retries one transient failure and throws after the bounded retry", asy
   assert.equal(calls, 2);
 });
 
+test("invalid device telemetry fails closed before a scheduler command", async () => {
+  const client = new EightClient({
+    fetch: async (input) =>
+      String(input).endsWith("/users/me")
+        ? jsonResponse({ user: { devices: ["bed"], currentDevice: { side: "left" } } })
+        : jsonResponse({ result: { leftNowHeating: true } }),
+  });
+  await assert.rejects(client.getHeatingStatus(token), EightApiError);
+});
+
 test("PUT mutations are not retried after a server failure", async () => {
   let calls = 0;
   const client = new EightClient({

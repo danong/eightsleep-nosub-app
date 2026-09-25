@@ -33,6 +33,7 @@
         </div>
         <button class="button button-quiet" id="pause-button" type="button" hidden>Pause</button>
       </section>
+      <div class="notice error" id="run-error" role="alert" hidden></div>
       <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
       <section class="panel" aria-labelledby="schedule-title">
         <div class="panel-heading">
@@ -176,7 +177,7 @@
           <button class="button button-primary save-button" id="save-button" type="submit">
             <span>Save schedule</span><span aria-hidden="true">↗</span>
           </button>
-          <p class="save-hint">Changes take effect at your next scheduled run.</p>
+          <p class="save-hint" id="save-hint">Changes take effect at your next scheduled run.</p>
         </form>
       </section>
       <section class="panel account-panel" aria-labelledby="account-title">
@@ -189,11 +190,11 @@
       </section>
       <footer><span>Made for better nights.</span><span id="last-run">Last run · —</span></footer>
     </main>
-    <dialog id="connect-dialog" class="dialog">
+    <dialog id="connect-dialog" class="dialog" aria-labelledby="connect-title">
       <form id="connect-form" method="dialog">
         <button class="dialog-close" id="close-dialog" type="button" aria-label="Close">×</button>
         <p class="card-kicker">ACCOUNT CONNECTION</p>
-        <h2>Reconnect Eight Sleep</h2>
+        <h2 id="connect-title">Reconnect Eight Sleep</h2>
         <p class="dialog-copy">Sign in to refresh the secure connection to your Pod.</p>
         <label class="field dialog-field"
           ><span class="field-label">EMAIL</span

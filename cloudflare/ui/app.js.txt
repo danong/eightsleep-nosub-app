@@ -1,5 +1,6 @@
 const form = document.querySelector("#settings-form");
 const notice = document.querySelector("#notice");
+const runError = document.querySelector("#run-error");
 const pauseButton = document.querySelector("#pause-button");
 const connectButton = document.querySelector("#connect-button");
 const connectDialog = document.querySelector("#connect-dialog");
@@ -109,7 +110,13 @@ function renderStatus(status) {
   pauseButton.hidden = !connected || !configured || inPreview;
   pauseButton.textContent = paused ? "Resume" : "Pause";
   connectButton.textContent = connected ? "Reconnect" : "Connect";
-  if (currentStatus.lastError) setNotice(`Last run error: ${currentStatus.lastError}`, "error");
+  runError.textContent = currentStatus.lastError
+    ? `Last run error: ${currentStatus.lastError}`
+    : "";
+  runError.hidden = !currentStatus.lastError;
+  document.querySelector("#save-hint").textContent = controlEnabled
+    ? "Changes take effect at your next scheduled run."
+    : "Schedule saved for preview. Bed control is currently off.";
 }
 
 async function load() {
@@ -150,8 +157,12 @@ form.addEventListener("submit", async (event) => {
   try {
     const result = await request("/api/settings", { method: "PUT", body: JSON.stringify(payload) });
     applySettings(result.settings || payload);
-    renderStatus({ configured: true });
-    setNotice("Schedule saved. Your next run will use these settings.");
+    renderStatus(await request("/api/status"));
+    setNotice(
+      currentStatus.controlEnabled
+        ? "Schedule saved. Your next run will use these settings."
+        : "Schedule saved in preview mode. Bed control is off.",
+    );
   } catch (error) {
     setNotice(error.message || "Could not save your schedule. Try again.", "error");
   } finally {

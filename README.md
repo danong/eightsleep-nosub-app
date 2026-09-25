@@ -1,5 +1,7 @@
 # Eight Sleep Control App
 
+> A Cloudflare Worker replacement is being developed in [cloudflare/](cloudflare/README.md). This README still describes the currently deployed Vercel version. Keep its cron job active until the Cloudflare cutover steps are complete.
+
 This WebApp is an alternative interface to control any Eight Sleep mattress. It gives the user the ability to schedule the temperature throughout the night without the need for an Eight Sleep subscription. This is achieved by not using Eight Sleep's "Smart Scheduling" feature, but instead running a recurring script every 30 minutes to adjust the temperature based on the schedule. If you share your mattress, both of you will be able to log in to your accounts and control your side of the mattress.
 
 <img src="eightsleep-nosub-app.png" alt="Eight Sleep No-Subscription App" width="500">

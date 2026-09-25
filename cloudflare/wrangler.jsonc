@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "eight-sleep-control",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-25",
+  "workers_dev": true,
+  "triggers": { "crons": ["*/30 * * * *"] },
+  "vars": { "CONTROL_ENABLED": "false" },
+  "secrets": { "required": ["TOKEN_KEY"] },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "eight-sleep",
+    "database_id": "00000000-0000-0000-0000-000000000000",
+    "migrations_dir": "migrations"
+  }],
+  "access": {
+    "dev": {
+      "aud": "local-only-eight-sleep",
+      "identity": { "email": "local@example.invalid" }
+    }
+  },
+  "rules": [{ "type": "Text", "globs": ["**/*.html", "**/*.css", "**/*.txt"], "fallthrough": false }]
+}

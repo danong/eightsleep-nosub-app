@@ -1,6 +1,10 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 /.vscode
+/.jj/
+/cloudflare/node_modules/
+/cloudflare/.wrangler/
+/cloudflare/.dev.vars*
 
 # dependencies
 /node_modules

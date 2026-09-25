@@ -6,7 +6,7 @@
   --stroke: #242d39;
   --text: #f1f3f7;
   --muted: #8c97a7;
-  --dim: #606b7b;
+  --dim: #9aa6b7;
   --accent: #b6a3ff;
   --mint: #83e0c2;
   --warning: #ffbf7f;
@@ -416,7 +416,7 @@ footer {
   padding: 17px 3px;
   display: flex;
   justify-content: space-between;
-  color: #657081;
+  color: var(--dim);
   font-size: 10px;
 }
 .notice {

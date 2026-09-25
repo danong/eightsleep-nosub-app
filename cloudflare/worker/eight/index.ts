@@ -43,9 +43,9 @@ export class EightClient {
 
   async getHeatingStatus(token: EightToken): Promise<HeatingStatus> {
     const profile = await this.getJson<UserProfile>(`${CLIENT_API_URL}/users/me`, token);
-    const deviceId = profile.user.devices[0];
+    const deviceId = profile?.user?.devices?.[0];
     if (!deviceId) throw new EightApiError("No Eight Sleep device is linked to this account");
-    const rawSide = profile.user.currentDevice.side;
+    const rawSide = profile.user.currentDevice?.side;
     if (rawSide !== "solo" && rawSide !== "left" && rawSide !== "right") {
       throw new EightApiError(`Unsupported bed side: ${rawSide}`);
     }
@@ -53,22 +53,36 @@ export class EightClient {
       `${CLIENT_API_URL}/devices/${encodeURIComponent(deviceId)}`,
       token,
     );
+    const result = device?.result;
+    if (
+      !result ||
+      !Number.isFinite(result.leftHeatingLevel) ||
+      !Number.isFinite(result.leftTargetHeatingLevel) ||
+      typeof result.leftNowHeating !== "boolean" ||
+      !Number.isFinite(result.leftHeatingDuration) ||
+      !Number.isFinite(result.rightHeatingLevel) ||
+      !Number.isFinite(result.rightTargetHeatingLevel) ||
+      typeof result.rightNowHeating !== "boolean" ||
+      !Number.isFinite(result.rightHeatingDuration)
+    ) {
+      throw new EightApiError("Eight Sleep returned an invalid device status");
+    }
     // Preserve the existing client's behavior: it selects left only for "left"
     // and uses the right telemetry channel otherwise, including "solo".
     const side = rawSide === "left" ? "left" : "right";
     const selected =
       side === "left"
         ? {
-            heatingLevel: device.result.leftHeatingLevel,
-            targetHeatingLevel: device.result.leftTargetHeatingLevel,
-            isHeating: device.result.leftNowHeating,
-            heatingDuration: device.result.leftHeatingDuration,
+            heatingLevel: result.leftHeatingLevel,
+            targetHeatingLevel: result.leftTargetHeatingLevel,
+            isHeating: result.leftNowHeating,
+            heatingDuration: result.leftHeatingDuration,
           }
         : {
-            heatingLevel: device.result.rightHeatingLevel,
-            targetHeatingLevel: device.result.rightTargetHeatingLevel,
-            isHeating: device.result.rightNowHeating,
-            heatingDuration: device.result.rightHeatingDuration,
+            heatingLevel: result.rightHeatingLevel,
+            targetHeatingLevel: result.rightTargetHeatingLevel,
+            isHeating: result.rightNowHeating,
+            heatingDuration: result.rightHeatingDuration,
           };
     return {
       side: rawSide,

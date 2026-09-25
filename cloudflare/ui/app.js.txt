@@ -1,0 +1,216 @@
+const form = document.querySelector("#settings-form");
+const notice = document.querySelector("#notice");
+const pauseButton = document.querySelector("#pause-button");
+const connectButton = document.querySelector("#connect-button");
+const connectDialog = document.querySelector("#connect-dialog");
+const connectForm = document.querySelector("#connect-form");
+const connectError = document.querySelector("#connect-error");
+const saveButton = document.querySelector("#save-button");
+const levelNames = ["early", "middle", "late"];
+let settings = null;
+let paused = false;
+let currentStatus = { connected: false, configured: false, paused: false, controlEnabled: false };
+
+function setNotice(message, kind = "success") {
+  notice.textContent = message;
+  notice.className = `notice ${kind}`;
+  notice.hidden = !message;
+}
+
+async function request(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: { "content-type": "application/json", ...options.headers },
+    credentials: "same-origin",
+  });
+  const payload = response.status === 204 ? {} : await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+  return payload;
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function setOptions(select, zones) {
+  const list = zones?.length
+    ? zones
+    : Intl.supportedValuesOf?.("timeZone") || ["UTC", "America/Los_Angeles", "America/New_York"];
+  select.replaceChildren(
+    ...list.map((zone) => {
+      const option = document.createElement("option");
+      option.value = zone;
+      option.textContent = zone.replaceAll("_", " ");
+      return option;
+    }),
+  );
+}
+
+function applySettings(value) {
+  settings = value;
+  document.querySelector("#bedtime").value = value.bedtime || "22:00";
+  document.querySelector("#wakeTime").value = value.wakeTime || "06:00";
+  const timezone = document.querySelector("#timezone");
+  if (![...timezone.options].some((option) => option.value === value.timezone)) {
+    const option = document.createElement("option");
+    option.value = value.timezone || "UTC";
+    option.textContent = option.value;
+    timezone.add(option);
+  }
+  timezone.value = value.timezone || "UTC";
+  for (const name of levelNames) {
+    const input = document.getElementById(name);
+    const level = Math.max(-10, Math.min(10, Number(value.levels?.[name] ?? 0)));
+    input.value = String(level);
+    document.getElementById(`${name}-value`).value = String(level);
+    document.getElementById(`${name}-value`).textContent = String(level);
+  }
+}
+
+function renderStatus(status) {
+  currentStatus = { ...currentStatus, ...status };
+  paused = Boolean(currentStatus.paused);
+  const connected = Boolean(currentStatus.connected);
+  const configured = Boolean(currentStatus.configured);
+  const controlEnabled = Boolean(currentStatus.controlEnabled);
+  const inPreview = connected && configured && !controlEnabled;
+  document.querySelector("#status-value").textContent = !connected
+    ? "Connect your account"
+    : !configured
+      ? "Save your schedule"
+      : inPreview
+        ? "Preview mode"
+        : paused
+          ? "Schedule paused"
+          : "Schedule is on";
+  const next = !configured
+    ? "Choose your times and temperatures, then save"
+    : inPreview
+      ? "Schedule is not controlling the bed yet"
+      : currentStatus.nextActionAt
+        ? `Next · ${formatDate(currentStatus.nextActionAt)}`
+        : currentStatus.nextActionLabel ||
+          (connected ? "Waiting for next scheduled action" : "Connect Eight Sleep to get started");
+  document.querySelector("#status-detail").textContent = next;
+  document.querySelector("#account-detail").textContent = connected
+    ? "Connected securely"
+    : "Not connected yet";
+  document.querySelector("#last-run").textContent =
+    `Last run · ${formatDate(currentStatus.lastRunAt)}`;
+  const icon = document.querySelector(".status-icon");
+  icon.classList.toggle("paused", paused || inPreview);
+  pauseButton.hidden = !connected || !configured || inPreview;
+  pauseButton.textContent = paused ? "Resume" : "Pause";
+  connectButton.textContent = connected ? "Reconnect" : "Connect";
+  if (currentStatus.lastError) setNotice(`Last run error: ${currentStatus.lastError}`, "error");
+}
+
+async function load() {
+  setOptions(document.querySelector("#timezone"));
+  try {
+    const [status, value] = await Promise.all([request("/api/status"), request("/api/settings")]);
+    renderStatus(status);
+    applySettings(value);
+  } catch (error) {
+    document.querySelector("#status-value").textContent = "Can’t load schedule";
+    document.querySelector("#status-detail").textContent = "Check your connection and try again.";
+    setNotice(error.message, "error");
+  }
+}
+
+for (const button of document.querySelectorAll("[data-step]")) {
+  button.addEventListener("click", () => {
+    const input = document.getElementById(button.dataset.step);
+    const next = Math.max(-10, Math.min(10, Number(input.value) + Number(button.dataset.delta)));
+    input.value = String(next);
+    document.getElementById(`${button.dataset.step}-value`).value = String(next);
+    document.getElementById(`${button.dataset.step}-value`).textContent = String(next);
+  });
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const data = new FormData(form);
+  const payload = {
+    bedtime: data.get("bedtime"),
+    wakeTime: data.get("wakeTime"),
+    timezone: data.get("timezone"),
+    levels: Object.fromEntries(levelNames.map((name) => [name, Number(data.get(name))])),
+  };
+  saveButton.disabled = true;
+  saveButton.querySelector("span").textContent = "Saving…";
+  setNotice("");
+  try {
+    const result = await request("/api/settings", { method: "PUT", body: JSON.stringify(payload) });
+    applySettings(result.settings || payload);
+    renderStatus({ configured: true });
+    setNotice("Schedule saved. Your next run will use these settings.");
+  } catch (error) {
+    setNotice(error.message || "Could not save your schedule. Try again.", "error");
+  } finally {
+    saveButton.disabled = false;
+    saveButton.querySelector("span").textContent = "Save schedule";
+  }
+});
+
+pauseButton.addEventListener("click", async () => {
+  pauseButton.disabled = true;
+  try {
+    const result = await request("/api/control", {
+      method: "POST",
+      body: JSON.stringify({ action: paused ? "resume" : "pause" }),
+    });
+    renderStatus({
+      connected: true,
+      paused: result.paused,
+      controlEnabled: currentStatus.controlEnabled,
+    });
+    setNotice(result.paused ? "Schedule paused." : "Schedule resumed.");
+  } catch (error) {
+    setNotice(error.message || "Could not update schedule status.", "error");
+  } finally {
+    pauseButton.disabled = false;
+  }
+});
+
+connectButton.addEventListener("click", () => {
+  connectError.hidden = true;
+  connectForm.reset();
+  connectDialog.showModal();
+});
+document.querySelector("#close-dialog").addEventListener("click", () => connectDialog.close());
+connectForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submit = document.querySelector("#connect-submit");
+  submit.disabled = true;
+  submit.textContent = "Connecting…";
+  connectError.hidden = true;
+  try {
+    await request("/api/connect", {
+      method: "POST",
+      body: JSON.stringify({
+        email: document.querySelector("#email").value,
+        password: document.querySelector("#password").value,
+      }),
+    });
+    connectDialog.close();
+    setNotice("Eight Sleep connected successfully.");
+    await load();
+  } catch (error) {
+    connectError.textContent =
+      error.message || "Could not connect. Check your details and try again.";
+    connectError.hidden = false;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "Connect securely";
+  }
+});
+
+load();

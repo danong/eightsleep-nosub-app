@@ -19,5 +19,11 @@
       "identity": { "email": "local@example.invalid" }
     }
   },
-  "rules": [{ "type": "Text", "globs": ["**/*.html", "**/*.css", "**/*.txt"], "fallthrough": false }]
+  "rules": [{ "type": "Text", "globs": ["**/*.html", "**/*.css", "**/*.txt"], "fallthrough": false }],
+  "observability": {
+    "logs": {
+      "enabled": false,
+      "invocation_logs": true
+    }
+  }
 }

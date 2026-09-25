@@ -10,7 +10,7 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "eight-sleep",
-    "database_id": "00000000-0000-0000-0000-000000000000",
+    "database_id": "5bc7b8ba-7e5c-4ac1-be67-896e846582a4",
     "migrations_dir": "migrations"
   }],
   "access": {

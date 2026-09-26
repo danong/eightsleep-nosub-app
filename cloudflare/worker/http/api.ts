@@ -1,7 +1,5 @@
-import { EightApiError, EightClient } from "../eight";
 import type { Env } from "../env";
-import { previewSchedule } from "../schedule/engine";
-import { getAccount, saveConnection, updatePaused, updateSettings } from "../store";
+import type { Settings } from "../account-state";
 import { InputError, parseConnection, parseControl, parseSettings } from "./validation";
 
 function json(value: unknown, status = 200): Response {
@@ -53,47 +51,47 @@ export async function handleApi(
 ): Promise<Response> {
   try {
     checkOrigin(request);
+    const scheduler = env.SCHEDULER.get(env.SCHEDULER.idFromName("home"));
     const path = new URL(request.url).pathname;
     if (request.method === "GET" && path === "/api/settings") {
-      return json((await getAccount(env, accessEmail)).settings);
+      return json(await scheduler.getSettings(accessEmail));
     }
     if (request.method === "GET" && path === "/api/status") {
-      const account = await getAccount(env, accessEmail);
-      const next = previewSchedule(account.settings, new Date());
       return json({
-        connected: Boolean(account.token),
-        configured: account.configured,
-        paused: account.paused,
+        ...(await scheduler.getStatus(accessEmail)),
         controlEnabled: env.CONTROL_ENABLED === "true",
-        lastRunAt: account.lastRunAt,
-        lastError: account.lastError,
-        nextActionAt: next.nextActionAt.toISOString(),
-        nextActionLabel: next.nextActionLabel,
       });
     }
     if (request.method === "PUT" && path === "/api/settings") {
       const settings = parseSettings(await body(request));
-      await updateSettings(env, accessEmail, settings);
+      await scheduler.putSettings(accessEmail, settings as Settings);
       return json({ ok: true, settings });
     }
     if (request.method === "POST" && path === "/api/control") {
       const action = parseControl(await body(request));
       const paused = action === "pause";
-      await updatePaused(env, accessEmail, paused);
+      await scheduler.setPaused(accessEmail, paused);
       return json({ ok: true, paused });
     }
     if (request.method === "POST" && path === "/api/connect") {
       const credentials = parseConnection(await body(request));
-      const client = new EightClient();
-      const token = await client.login(credentials.email, credentials.password);
-      await client.getHeatingStatus(token);
-      await saveConnection(env, accessEmail, credentials.email, token);
+      await scheduler.connectAccount(accessEmail, credentials.email, credentials.password);
       return json({ ok: true });
     }
     return json({ error: "Not found" }, 404);
   } catch (error) {
     if (error instanceof InputError) return json({ error: error.message }, 400);
-    if (error instanceof EightApiError) return json({ error: error.message }, 502);
+    if (
+      error &&
+      typeof error === "object" &&
+      "status" in error &&
+      typeof error.status === "number"
+    ) {
+      return json(
+        { error: error instanceof Error ? error.message : "Eight Sleep request failed" },
+        502,
+      );
+    }
     console.error("API request failed", error instanceof Error ? error.message : "Unknown error");
     return json({ error: "Could not complete the request" }, 500);
   }

@@ -4,28 +4,27 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-25",
   "workers_dev": true,
-  "triggers": { "crons": ["*/30 * * * *"] },
   "vars": { "CONTROL_ENABLED": "false" },
   "secrets": { "required": ["TOKEN_KEY"] },
-  "d1_databases": [{
-    "binding": "DB",
-    "database_name": "eight-sleep",
-    "database_id": "5bc7b8ba-7e5c-4ac1-be67-896e846582a4",
-    "migrations_dir": "migrations"
-  }],
+  "durable_objects": {
+    "bindings": [{ "name": "SCHEDULER", "class_name": "SchedulerObject" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SchedulerObject"] }],
   "access": {
     "dev": {
       "aud": "local-only-eight-sleep",
-      "identity": { "email": "local@example.invalid" }
-    }
+      "identity": { "email": "local@example.invalid" },
+    },
   },
-  "rules": [{ "type": "Text", "globs": ["**/*.html", "**/*.css", "**/*.txt"], "fallthrough": false }],
+  "rules": [
+    { "type": "Text", "globs": ["**/*.html", "**/*.css", "**/*.txt"], "fallthrough": false },
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
-      "invocation_logs": true
-    }
-  }
+      "invocation_logs": true,
+    },
+  },
 }

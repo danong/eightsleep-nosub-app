@@ -1,5 +1,7 @@
+import type { SchedulerObject } from "./scheduler-object";
+
 export interface Env {
-  DB: D1Database;
+  SCHEDULER: DurableObjectNamespace<SchedulerObject>;
   TOKEN_KEY: string;
   CONTROL_ENABLED?: string;
 }

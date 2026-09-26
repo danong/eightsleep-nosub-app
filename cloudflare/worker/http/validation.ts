@@ -1,4 +1,4 @@
-import type { Settings } from "../store";
+import type { Settings } from "../account-state";
 
 export class InputError extends Error {
   constructor(message: string) {

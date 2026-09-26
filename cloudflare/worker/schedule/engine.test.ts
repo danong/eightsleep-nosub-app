@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  nextControlAt,
   previewSchedule,
   reconcileSchedule,
   type ScheduleProfile,
@@ -14,6 +15,42 @@ const profile: ScheduleProfile = {
   levels: { early: 1, middle: -2, late: -5 },
 };
 const at = (iso: string) => new Date(iso);
+
+test("next control event skips bedtime when preheat and early sleep share a target", () => {
+  assert.equal(
+    nextControlAt(profile, at("2025-01-15T02:30:00Z")).toISOString(),
+    "2025-01-15T04:00:00.000Z",
+  );
+  assert.equal(
+    nextControlAt(profile, at("2025-01-15T03:00:00Z")).toISOString(),
+    "2025-01-15T04:00:00.000Z",
+  );
+});
+
+test("next control event is strictly after exact boundaries", () => {
+  assert.equal(
+    nextControlAt(profile, at("2025-01-15T04:00:00Z")).toISOString(),
+    "2025-01-15T09:00:00.000Z",
+  );
+  assert.equal(
+    nextControlAt(profile, at("2025-01-15T11:00:00Z")).toISOString(),
+    "2025-01-16T02:00:00.000Z",
+  );
+});
+
+test("next control event follows local schedule boundaries across DST changes", () => {
+  const fallBack = { ...profile, bedtime: "01:30", wakeTime: "08:00" };
+  assert.equal(
+    nextControlAt(fallBack, at("2025-11-02T05:45:00Z")).toISOString(),
+    "2025-11-02T06:30:00.000Z",
+  );
+
+  const springForward = { ...profile, bedtime: "02:30", wakeTime: "10:00" };
+  assert.equal(
+    nextControlAt(springForward, at("2025-03-09T07:35:00Z")).toISOString(),
+    "2025-03-09T08:00:00.000Z",
+  );
+});
 
 test("overnight schedule selects preheat, bed, middle, late, then off boundaries", () => {
   const checks = [

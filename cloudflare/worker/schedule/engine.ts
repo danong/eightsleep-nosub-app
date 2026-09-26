@@ -199,6 +199,35 @@ function findCycle(now: Date, profile: ScheduleProfile): Cycle {
   );
 }
 
+/**
+ * Return the next instant at which the scheduled bed target actually changes.
+ *
+ * Keep this API expressed in terms of control transitions rather than stage
+ * names. The current schedule is represented as a set of candidate boundaries;
+ * a boundary is actionable only when the target immediately before it differs
+ * from the target at it. That naturally omits bedtime, where preheat and sleep
+ * currently share a level, and allows the phase model to be replaced without
+ * changing callers such as the scheduler Durable Object.
+ */
+export function nextControlAt(profile: ScheduleProfile, now: Date): Date {
+  if (!Number.isFinite(now.getTime())) throw new Error("Invalid current time");
+  new Intl.DateTimeFormat("en-US", { timeZone: profile.timezone });
+  const local = partsAt(now.getTime(), profile.timezone);
+  const boundaries = [-1, 0, 1, 2]
+    .map((day) => cycleForDate(dateShift(local, day), profile))
+    .flatMap((cycle) => [cycle.preheat, cycle.bed, cycle.middle, cycle.late, cycle.wake])
+    .filter((instant) => instant > now.getTime())
+    .sort((a, b) => a - b);
+
+  for (const instant of boundaries) {
+    const cycle = findCycle(new Date(instant), profile);
+    const before = stageAt(instant - 1, cycle, profile).level;
+    const after = stageAt(instant, cycle, profile).level;
+    if (before !== after) return new Date(instant);
+  }
+  throw new Error("Could not find next schedule control event");
+}
+
 function stageAt(
   now: number,
   cycle: Cycle,
@@ -254,8 +283,8 @@ export function previewSchedule(
   };
 }
 
-/** Determine the target on every cron tick and preserve detected manual changes
- * until the next cycle's preheat begins. A caller should persist `nextState`.
+/** Determine the target when reconciliation runs and preserve detected manual
+ * changes until the next cycle begins. A caller should persist `nextState`.
  */
 export function reconcileSchedule(input: ReconcileInput): ReconcileResult {
   const cycle = findCycle(input.now, input.profile);

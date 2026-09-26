@@ -3,7 +3,8 @@ import css from "../ui/styles.css";
 import script from "../ui/app.js.txt";
 import type { Env } from "./env";
 import { handleApi } from "./http/api";
-import { runScheduled } from "./run";
+
+export { SchedulerObject } from "./scheduler-object";
 
 function asset(content: string, type: string): Response {
   return new Response(content, {
@@ -33,8 +34,5 @@ export default {
     if (path === "/styles.css") return asset(css, "text/css; charset=utf-8");
     if (path === "/app.js") return asset(script, "text/javascript; charset=utf-8");
     return new Response("Not found", { status: 404 });
-  },
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    await runScheduled(env);
   },
 };

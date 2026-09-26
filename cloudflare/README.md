@@ -24,9 +24,17 @@ Cloudflare's free Worker limit is 10 ms of CPU per invocation; time waiting on `
 
 ## Cutover and rollback
 
-Keep the existing Vercel deployment available until the new app has worked through several nights. To cut over, first disable the `cron-job.org` job that calls Vercel's `/api/temperatureCron`. Confirm it has stopped, then connect both Eight Sleep accounts in the private Cloudflare UI. Set `CONTROL_ENABLED` to `true` in `wrangler.jsonc` and redeploy. Observe the next Cloudflare cron event and the bed's actual state. Never leave both schedulers active for the same side.
+Keep the Vercel deployment available for rollback, but do not run both schedulers against the same bed side. Connecting an account confirms that Eight Sleep login, device status, and encrypted token storage work; it does not exercise the schedule.
 
-For rollback, first set `CONTROL_ENABLED` back to `false` and redeploy (or disable the Worker Cron Trigger in Cloudflare). Confirm Worker commands have stopped. Only then re-enable the old `cron-job.org` job. The old Vercel app retains its own Postgres data and credentials. Check that its Eight Sleep connection still works, since a fresh login in the new app may affect existing tokens.
+Use this verification sequence:
+
+1. In the Cloudflare UI, save each person's schedule and confirm the time zone, bedtime, wake time, and three levels. While `CONTROL_ENABLED` is `false`, the UI says **Preview mode**; cron runs do not contact Eight Sleep or change the bed.
+2. At cutover, disable the `cron-job.org` job that calls Vercel's `/api/temperatureCron`. Confirm it is disabled before enabling Worker control.
+3. Set `CONTROL_ENABLED` to `true` in `wrangler.jsonc` and redeploy. Keep the Vercel app available, with its cron still disabled.
+4. Over the next several nights, check the Cloudflare Worker Observability logs for each scheduled run and errors. In the UI, confirm **Last run** advances and no run error appears. Check the Eight Sleep app or physical controls after the preheat, bedtime, stage transitions, and wake time to confirm the observed side follows the schedule. The cron runs every 30 minutes, so each transition can occur up to 30 minutes after its configured time.
+5. If a run fails or the bed does not follow the schedule, set `CONTROL_ENABLED` to `false` and redeploy before re-enabling the Vercel cron. Never leave both schedulers active for the same side.
+
+The old Vercel app retains its own Postgres data and credentials. Check that its Eight Sleep connection still works before relying on it for rollback, since a fresh login in the new app may affect existing tokens.
 
 ## Code map
 

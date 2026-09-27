@@ -1,92 +1,30 @@
-# Eight Sleep Control App
+# Nightshift
 
-> A Cloudflare Worker replacement is being developed in [cloudflare/](cloudflare/README.md). This README still describes the currently deployed Vercel version. Keep its cron job active until the Cloudflare cutover steps are complete.
+A Cloudflare Worker that schedules an Eight Sleep bed without an Eight Sleep subscription. Cloudflare Access identifies each user. One SQLite-backed Durable Object stores both users' settings and encrypted Eight Sleep tokens, and its alarm wakes at the next schedule change. The Worker serves the UI and API from this repository.
 
-This WebApp is an alternative interface to control any Eight Sleep mattress. It gives the user the ability to schedule the temperature throughout the night without the need for an Eight Sleep subscription. This is achieved by not using Eight Sleep's "Smart Scheduling" feature, but instead running a recurring script every 30 minutes to adjust the temperature based on the schedule. If you share your mattress, both of you will be able to log in to your accounts and control your side of the mattress.
+Each user chooses a bedtime, wake time, time zone, and early, middle, and late levels. The app derives the phase times and starts preheat up to one hour before bedtime. Physical or Eight Sleep app adjustments during sleep are respected until wake; daytime adjustments persist until the next preheat. The UI shows recent scheduler checks, observed bed settings, and commands. These observations come from scheduled runs; the app does not poll the bed.
 
-<img src="eightsleep-nosub-app.png" alt="Eight Sleep No-Subscription App" width="500">
+## Develop
 
-## How to use this app yourself
+Use Node 24 or later. Run `npm ci`, `npm test`, and `npm run typecheck` from the repository root. For local development, create `.dev.vars` with a **development-only** 64-character hex `TOKEN_KEY` (for example, `openssl rand -hex 32`), then run `npm run dev` and open `http://localhost:8787`. Wrangler supplies the local Access identity `local@example.invalid`. The dev script forces `CONTROL_ENABLED=false`, so local alarms do not control the bed.
 
-In the following, I will explain how to self-host this webapp on Vercel so that you can control it from anywhere. The setup will not generate any costs. It should take about 15 minutes to complete, **no coding skills required**.
+Wrangler stores local Durable Object data in `.wrangler/`. Both `.dev.vars` and `.wrangler/` are ignored by Git.
 
-1. Set up a (free) GitHub Account
-2. Set up a (free) Vercel Account using your GitHub Account as the Login Method
-3. On this GitHub Page, click the "Fork" Button to make a copy of this repository, and follow the steps, renaming the project to whatever you want.
-4. Go to your Vercel Dashboard and create a new Project
-5. You are now in the process of creating a new project on Vercel.
-    - In "Import Git Repository" select your forked project
-    - At "Configure Project" select the "Environment Variables" Section and create the three needed Environment Variables (`CRON_SECRET`, `JWT_SECRET`, `APPROVED_EMAILS`) and set the two Secrets to a random string of your choice. [E.g. use this site](https://it-tools.tech/token-generator). Save the **CRON_SECRET**, you will need it in a moment. 
-    - Set APPROVED_EMAILS to a comma-separated list of emails that are allowed to log in to the app. This is so that no one except you (and potentially your partner) can log in to the app.
-    - Continue and the project will be built. **The first build will fail, which is expected**.
-    - Click "Go to Project"
-6. Two more settings in Vercel
-    - In the project, click the "Settings" Tab
-    - In the "General" tab under "Build & Development Settings" override the "Build Command" to `npm run build && npm run db:push` and **press the save button**.
-    - In the "Deployment Protection" Tab, disable "Vercel Authentication" at the very top.
-7. Add database to project
-    - In the project, click the "Storage" Tab
-    - Click "Create Database"
-    - Select "Postgres", then "accept", then "create", then "connect" (all defaults are fine in between)
-8. Rebuild project
-    - In the project, click the "Deployments" Tab.
-    - Select the 3 dots next to the previously failed build and click "Redeploy"
-9. Test the app
-    - Go to the main "Project" Tab
-    - On the top right click "Visit"
-    - Welcome to your new App! Save the URL, we will need it in a second. Also save it as a bookmark for future use.
-    - Try to log in to the app with your Eight Sleep Login. This will work now.
-    - Important: **Set up a Temperature profile now!** or the next step will fail. You can change it later.
-10. Activate the recurring Update of the Mattress
-    - Go to [cron-job.org](https://cron-job.org/en/) and set up a free account
-    - Create a new "Cron Job"
-    - Title can be anything
-    - URL: `https://YOUR_VERCEL_URL/api/temperatureCron` e.g. `https://eightsleep-nosub-app-efwfwfwf-aerotows-projects.vercel.app/api/temperatureCron`
-    - Set it to every 30 minutes
-    - Under the "Advanced" Tab add a "Header"
-        - Key: `Authorization`
-        - Value: `Bearer YOUR_CRON_SECRET` (note the space after Bearer, include the word Bearer and the space!)
-    - Click "TEST RUN", then "START TEST RUN" and make sure that the "TEST RUN STATUS" is "200 OK"
-    - Click "Save"
+## Deploy
 
+Run `npm run deploy` from the repository root. `wrangler.jsonc` deploys the `eight-sleep-control` Worker with `CONTROL_ENABLED=true` and the existing `SchedulerObject` binding. Moving the source to the repository root does not create a new Worker or move its remote Durable Object data.
 
-Enjoy! That's it!
+Keep `TOKEN_KEY` configured as a Worker secret. It encrypts stored Eight Sleep tokens; changing or losing it requires each user to reconnect. Protect every Worker URL, including `workers.dev` and preview URLs, with Cloudflare Access. The Worker rejects requests without an Access identity. The custom domain is `sleep.danong.dev`.
 
-## How to Upgrade from an older Version?
+To stop bed control, set `CONTROL_ENABLED` to `false` in `wrangler.jsonc` and deploy again. Leave it disabled until the issue is resolved.
 
-Check the [Release Notes](https://github.com/aerotow/eightsleep-nosub-app/releases) to see what changed. I will include steps you have to do there to upgrade. After you have read the notes there and made potential changes, make sure to go to your GitHub fork and sync to the latest commit of this repository. It's just one click at the top.
+## Code map
 
-## Credits
+- `worker/index.ts`: Access gate and UI asset routes.
+- `worker/http/`: JSON API and input validation.
+- `worker/scheduler-object.ts`: account state, alarms, and Eight Sleep reconciliation.
+- `worker/schedule/`: phase and manual override calculations.
+- `worker/eight/`: Eight Sleep HTTP client.
+- `ui/`: mobile settings page, schedule chart, and recent activity.
 
-- Thanks to @lukas-clarke for his Home Assistant package eight_sleep and pyEight which gave me the idea of the possibility to use the API of the app.
-- Thanks also to @mezz64 for the initial work on his pyEight package.
-- Thanks to the @t3-oss team for the great T3 boilerplate on which this codebase is based.
-
-## Disclaimer
-
-### IMPORTANT: Please read this disclaimer carefully before using this software.
-
-This project is an unofficial, independent effort and is not affiliated with, endorsed by, or supported by Eight Sleep, Inc. in any way. The software provided here interacts with Eight Sleep's systems through reverse-engineered methods and is not using any officially sanctioned API.
-
-**Key Points:**
-
-- **Unofficial Project**: This is not an official Eight Sleep product. Use it at your own risk.
-- **No Warranty**: This software is provided "as is", without warranty of any kind, express or implied.
-
-**Potential Risks:**
-
-- Using this software may violate Eight Sleep's Terms of Service.
-- It could potentially lead to account suspension or other actions by Eight Sleep.
-- Future updates to Eight Sleep's systems may break this software's functionality.
-
-**Data Security**: While we strive to handle data securely, we cannot guarantee the same level of security as Eight Sleep's official apps. Use caution when handling sensitive information.
-
-**Legal Considerations**: The legality of reverse engineering and using unofficial APIs can vary by jurisdiction. Ensure you understand the legal implications in your area.
-
-**No Liability**: The developers of this project are not responsible for any damages or losses, including but not limited to, damages related to data loss, service interruption, or account issues.
-
-**Use Responsibly**: This tool is intended for personal use only. Do not use it to access or modify data of Eight Sleep accounts you do not own or have explicit permission to manage.
-
-By using this software, you acknowledge that you have read this disclaimer, understand its contents, and agree to use the software at your own risk. If you do not agree with these terms, do not use this software.
-
-Always prioritize the official Eight Sleep app for critical functions and data management related to your Eight Sleep products.
+UI assets are served through the Worker so every request passes the Access identity check.

@@ -1,5 +1,6 @@
 import type { EightToken } from "./eight";
 import { seal, unseal } from "./secrets";
+import type { ActivityEntry } from "./activity";
 
 /** User-editable schedule data. The scheduler treats this as an opaque profile. */
 export interface Settings {
@@ -29,6 +30,8 @@ export interface AccountState {
   retryAt: number | null;
   failureCount: number;
   nextActionAt: number | null;
+  /** Optional for compatibility with account records written before activity history existed. */
+  activity?: ActivityEntry[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {

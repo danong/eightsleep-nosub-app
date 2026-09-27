@@ -1,6 +1,7 @@
 import html from "../ui/index.html";
 import css from "../ui/styles.css";
 import script from "../ui/app.js.txt";
+import timelineScript from "../ui/timeline.js.txt";
 import type { Env } from "./env";
 import { handleApi } from "./http/api";
 
@@ -33,6 +34,7 @@ export default {
     if (path === "/" || path === "/index.html") return asset(html, "text/html; charset=utf-8");
     if (path === "/styles.css") return asset(css, "text/css; charset=utf-8");
     if (path === "/app.js") return asset(script, "text/javascript; charset=utf-8");
+    if (path === "/timeline.js") return asset(timelineScript, "text/javascript; charset=utf-8");
     return new Response("Not found", { status: 404 });
   },
 };

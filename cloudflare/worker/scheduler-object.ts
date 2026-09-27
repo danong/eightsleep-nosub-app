@@ -16,6 +16,7 @@ import {
   type Settings,
 } from "./account-state";
 import { immediateActionAt, retrySchedule } from "./scheduler-timing";
+import { appendActivity, buildActivityEntry, type ActivityEntry } from "./activity";
 
 export type { Settings } from "./account-state";
 
@@ -32,6 +33,7 @@ type PublicStatus = {
   nextActionAt: string | null;
   nextActionLabel: string | null;
   timeline: ScheduleTimeline | null;
+  activity: ActivityEntry[];
 };
 
 export class SchedulerObject extends DurableObject<Env> {
@@ -68,6 +70,7 @@ export class SchedulerObject extends DurableObject<Env> {
       nextActionAt,
       nextActionLabel,
       timeline,
+      activity: account.activity ?? [],
     };
   }
 
@@ -148,7 +151,23 @@ export class SchedulerObject extends DurableObject<Env> {
         await this.runAccount(account, new Date(now), generation);
       } catch (error) {
         if (error instanceof Error && error.message === STALE_WORK) continue;
-        await this.recordFailure(account.email, now, error, generation).catch(() => undefined);
+        await this.recordFailure(
+          account.email,
+          now,
+          error,
+          generation,
+          buildActivityEntry({
+            at: new Date(now).toISOString(),
+            observedAvailable: false,
+            observedLevel: null,
+            scheduledLevel: previewSchedule(account.settings, new Date(now)).desiredLevel,
+            commandLevel: null,
+            commandAttempted: false,
+            commandIssued: false,
+            detectedManualOverride: false,
+            failed: true,
+          }),
+        ).catch(() => undefined);
       }
     }
     await this.mutate(() => this.rearm());
@@ -167,10 +186,12 @@ export class SchedulerObject extends DurableObject<Env> {
       status = await this.client.getHeatingStatus(token);
     }
     await this.assertCurrent(account.email, generation);
+    const observedLevel = status.isHeating ? status.heatingLevel / 10 : null;
+    const scheduledLevel = previewSchedule(account.settings, now).desiredLevel;
     const result = reconcileSchedule({
       profile: account.settings,
       now,
-      observedLevel: status.isHeating ? status.heatingLevel / 10 : null,
+      observedLevel,
       previous:
         account.commandKnown && account.cycleId
           ? {
@@ -181,34 +202,75 @@ export class SchedulerObject extends DurableObject<Env> {
             }
           : null,
     });
-    if (result.commandRequired) {
-      // Persist an unknown command marker before any bed write. If the bed
-      // accepts a write but the following state save fails, retry reads live
-      // state without treating our write as a manual adjustment.
-      account.commandKnown = false;
-      account.cycleId = null;
-      account.manualOverride = false;
-      account.overrideLevel = null;
-      await this.saveIfCurrent(account, generation);
-      await this.assertCurrent(account.email, generation);
-      if (result.command === null) await this.client.turnOff(token);
-      else {
-        if (!status.isHeating) await this.client.turnOn(token);
-        await this.client.setLevel(token, token.userId, result.command * 10);
+    const detectedManualOverride = result.manualOverride && !account.manualOverride;
+    let commandAttempted = false;
+    let commandIssued = false;
+    let commandCompletedAt: string | null = null;
+    try {
+      if (result.commandRequired) {
+        // Persist an unknown command marker before any bed write. If the bed
+        // accepts a write but the following state save fails, retry reads live
+        // state without treating our write as a manual adjustment.
+        account.commandKnown = false;
+        account.cycleId = null;
+        account.manualOverride = false;
+        account.overrideLevel = null;
+        await this.saveIfCurrent(account, generation);
+        await this.assertCurrent(account.email, generation);
+        commandAttempted = true;
+        if (result.command === null) await this.client.turnOff(token);
+        else {
+          if (!status.isHeating) await this.client.turnOn(token);
+          await this.client.setLevel(token, token.userId, result.command * 10);
+        }
+        await this.assertCurrent(account.email, generation);
+        commandIssued = true;
+        commandCompletedAt = new Date().toISOString();
       }
-      await this.assertCurrent(account.email, generation);
+      account.cycleId = result.nextState.cycleId;
+      account.lastCommandedLevel = result.nextState.lastCommandedLevel;
+      account.commandKnown = true;
+      account.manualOverride = result.nextState.manualOverride;
+      account.overrideLevel = result.nextState.overrideLevel;
+      account.lastRunAt = now.toISOString();
+      account.lastError = null;
+      account.retryAt = null;
+      account.failureCount = 0;
+      account.nextActionAt = this.nextAt(account, now.getTime() + 1).getTime();
+      account.activity = appendActivity(
+        account.activity,
+        buildActivityEntry({
+          at: commandCompletedAt ?? now.toISOString(),
+          observedAvailable: true,
+          observedLevel,
+          scheduledLevel,
+          commandLevel: result.commandRequired ? result.command : null,
+          commandAttempted,
+          commandIssued,
+          detectedManualOverride,
+        }),
+      );
+      await this.saveIfCurrent(account, generation);
+    } catch (error) {
+      if (error instanceof Error && error.message === STALE_WORK) throw error;
+      await this.recordFailure(
+        account.email,
+        now.getTime(),
+        error,
+        generation,
+        buildActivityEntry({
+          at: new Date().toISOString(),
+          observedAvailable: true,
+          observedLevel,
+          scheduledLevel,
+          commandLevel: result.commandRequired ? result.command : null,
+          commandAttempted,
+          commandIssued,
+          detectedManualOverride,
+          failed: true,
+        }),
+      ).catch(() => undefined);
     }
-    account.cycleId = result.nextState.cycleId;
-    account.lastCommandedLevel = result.nextState.lastCommandedLevel;
-    account.commandKnown = true;
-    account.manualOverride = result.nextState.manualOverride;
-    account.overrideLevel = result.nextState.overrideLevel;
-    account.lastRunAt = now.toISOString();
-    account.lastError = null;
-    account.retryAt = null;
-    account.failureCount = 0;
-    account.nextActionAt = this.nextAt(account, now.getTime() + 1).getTime();
-    await this.saveIfCurrent(account, generation);
   }
 
   private async validToken(
@@ -305,6 +367,7 @@ export class SchedulerObject extends DurableObject<Env> {
     now: number,
     error: unknown,
     revision: number,
+    activity: ActivityEntry,
   ): Promise<void> {
     await this.ctx.storage.transaction(async (transaction) => {
       const storedRevision = (await transaction.get<number>(this.revisionKey(email))) ?? 0;
@@ -323,6 +386,10 @@ export class SchedulerObject extends DurableObject<Env> {
       account.lastRunAt = new Date(now).toISOString();
       account.lastError =
         error instanceof Error ? error.message.slice(0, 300) : "Unknown scheduler failure";
+      account.activity = appendActivity(account.activity, {
+        ...activity,
+        error: "Scheduler run failed",
+      });
       await transaction.put(this.key(email), account);
     });
   }

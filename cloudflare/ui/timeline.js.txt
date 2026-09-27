@@ -1,0 +1,307 @@
+function formatClock(value, timezone) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const showSeconds = date.getSeconds() !== 0;
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: timezone || "UTC",
+      hour: "numeric",
+      minute: "2-digit",
+      ...(showSeconds ? { second: "2-digit" } : {}),
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      ...(showSeconds ? { second: "2-digit" } : {}),
+    }).format(date);
+  }
+}
+
+export function renderTimeline(status, settings) {
+  const timeline = status?.timeline;
+  const panel = document.querySelector("#timeline-panel");
+  const chart = document.querySelector("#timeline-chart");
+  const nowLabel = document.querySelector("#timeline-now");
+  const preheatLabel = document.querySelector("#preheat-time");
+  const activityBox = document.querySelector("#activity");
+  chart.replaceChildren();
+  nowLabel.hidden = true;
+  renderActivity(status?.activity, timeline?.timezone || settings?.timezone || "UTC");
+  const segments = Array.isArray(timeline?.segments)
+    ? timeline.segments
+        .map((segment) => ({
+          ...segment,
+          start: new Date(segment.startAt).getTime(),
+          end: new Date(segment.endAt).getTime(),
+        }))
+        .filter(
+          (segment) =>
+            Number.isFinite(segment.start) &&
+            Number.isFinite(segment.end) &&
+            segment.end >= segment.start,
+        )
+    : [];
+  if (!segments.length) {
+    panel.hidden = activityBox.hidden;
+    preheatLabel.hidden = true;
+    activityBox.hidden = !Array.isArray(status?.activity) || !status.activity.length;
+    return;
+  }
+  const timezone = timeline.timezone || settings?.timezone || "UTC";
+  const formatRange = (phase) =>
+    phase ? `${formatClock(phase.startAt, timezone)} – ${formatClock(phase.endAt, timezone)}` : "—";
+  for (const key of ["early", "middle", "late"]) {
+    const phase = segments.find((item) => item.key === key);
+    const target = document.querySelector(`#${key}-time`);
+    if (target) target.textContent = formatRange(phase);
+  }
+  const preheat = segments.find((item) => item.key === "preheat");
+  if (preheat) {
+    preheatLabel.textContent =
+      preheat.start === preheat.end
+        ? "PREHEAT · No preheat gap"
+        : `PREHEAT · ${formatRange(preheat)}`;
+    preheatLabel.hidden = false;
+  } else preheatLabel.hidden = true;
+
+  const plotted = segments.filter((segment) => segment.end > segment.start);
+  if (!plotted.length) {
+    panel.hidden = true;
+    return;
+  }
+  const minTime = Math.min(...plotted.map((segment) => segment.start));
+  const maxTime = Math.max(...plotted.map((segment) => segment.end));
+  if (!(maxTime > minTime)) {
+    panel.hidden = true;
+    return;
+  }
+  const levels = plotted
+    .map((s) => s.level)
+    .filter((v) => v != null)
+    .map(Number)
+    .filter(Number.isFinite);
+  let low = levels.length ? Math.min(...levels) : 0;
+  let high = levels.length ? Math.max(...levels) : 0;
+  const span = Math.max(1, high - low);
+  low -= Math.max(0.5, span * 0.24);
+  high += Math.max(0.5, span * 0.24);
+  const offLevel = low - Math.max(1.2, (high - low) * 0.24);
+  const width = 760,
+    height = 260,
+    left = 50,
+    right = 12,
+    top = 18,
+    bottom = 56;
+  const plotWidth = width - left - right,
+    plotHeight = height - top - bottom;
+  const x = (time) => left + ((time - minTime) / (maxTime - minTime)) * plotWidth;
+  const y = (level) =>
+    top + ((high - (level == null ? offLevel : Number(level))) / (high - offLevel)) * plotHeight;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "application");
+  svg.setAttribute(
+    "aria-label",
+    "Scheduled target levels. Use left and right arrow keys to inspect each schedule change.",
+  );
+  svg.setAttribute("tabindex", "0");
+  svg.classList.add("timeline-svg");
+  const make = (name, attrs) => {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));
+    return el;
+  };
+  const ticks = [...new Set([low, (low + high) / 2, high])];
+  for (const level of ticks) {
+    const yy = y(level);
+    svg.append(
+      make("line", { x1: left, x2: width - right, y1: yy, y2: yy, class: "timeline-grid" }),
+    );
+    const label = make("text", {
+      x: left - 8,
+      y: yy + 4,
+      "text-anchor": "end",
+      class: "timeline-axis",
+    });
+    label.textContent = `${Number(level.toFixed(1)) > 0 ? "+" : ""}${Number(level.toFixed(1))}°`;
+    svg.append(label);
+  }
+  const offY = y(null);
+  svg.append(
+    make("line", {
+      x1: left,
+      x2: width - right,
+      y1: offY,
+      y2: offY,
+      class: "timeline-grid timeline-off-grid",
+    }),
+  );
+  const offLabel = make("text", {
+    x: left - 8,
+    y: offY + 4,
+    "text-anchor": "end",
+    class: "timeline-axis",
+  });
+  offLabel.textContent = "Off";
+  svg.append(offLabel);
+
+  const sorted = [...plotted].sort((a, b) => a.start - b.start);
+  let previous = sorted[0]?.level;
+  sorted.forEach((segment, index) => {
+    const x1 = x(segment.start),
+      x2 = x(segment.end),
+      yy = y(segment.level);
+    const prevY = index === 0 ? yy : y(previous);
+    svg.append(
+      make("path", {
+        d: `M ${x1} ${prevY} V ${yy} H ${x2}`,
+        class: segment.level == null ? "timeline-line timeline-off-segment" : "timeline-line",
+      }),
+    );
+    previous = segment.level;
+  });
+  const meaningful = sorted.filter(
+    (segment) =>
+      ["early", "middle", "late"].includes(segment.key) ||
+      (segment.key === "preheat" && segment.end > segment.start),
+  );
+  const labelItems = meaningful.map((segment) => ({ time: segment.start, label: segment.key }));
+  const lastSleepPhase = meaningful.at(-1);
+  if (lastSleepPhase) labelItems.push({ time: lastSleepPhase.end, label: "Wake" });
+  for (const item of labelItems) {
+    const xx = x(item.time);
+    const anchor = xx < left + 35 ? "start" : xx > width - right - 35 ? "end" : "middle";
+    const label = make("text", {
+      x: xx,
+      y: height - 26,
+      "text-anchor": anchor,
+      class: "timeline-axis timeline-change-label",
+    });
+    const name = make("tspan", { x: xx, dy: 0 });
+    name.textContent =
+      item.label === "middle"
+        ? "Mid sleep"
+        : item.label === "early"
+          ? "Early sleep"
+          : item.label === "late"
+            ? "Late sleep"
+            : item.label === "preheat"
+              ? "Preheat"
+              : item.label;
+    const clock = make("tspan", { x: xx, dy: 14 });
+    clock.textContent = formatClock(item.time, timezone);
+    label.append(name, clock);
+    svg.append(
+      make("line", {
+        x1: xx,
+        x2: xx,
+        y1: top + plotHeight,
+        y2: height - 48,
+        class: "timeline-change-tick",
+      }),
+      label,
+    );
+  }
+  const inspectable = [...new Map(sorted.map((s) => [s.start, s])).values()];
+  const readout = (time, seg) =>
+    `${formatClock(time, timezone)} · ${seg.level == null ? "Off" : `scheduled level ${Number(seg.level) > 0 ? "+" : ""}${seg.level}°`}`;
+  let selected = 0;
+  const marker = make("circle", {
+    cx: x(inspectable[0].start),
+    cy: y(inspectable[0].level),
+    r: 5,
+    class: "timeline-point",
+    visibility: "hidden",
+  });
+  svg.append(marker);
+  const announce = (time, seg) => {
+    marker.setAttribute("cx", x(time));
+    marker.setAttribute("cy", y(seg.level));
+    marker.setAttribute("visibility", "visible");
+    nowLabel.textContent = readout(time, seg);
+    nowLabel.hidden = false;
+  };
+  const chooseAt = (clientX) => {
+    const rect = svg.getBoundingClientRect(),
+      pointX = ((clientX - rect.left) / rect.width) * width;
+    const time = minTime + ((pointX - left) / plotWidth) * (maxTime - minTime);
+    const seg = sorted.find((s) => time >= s.start && time < s.end) || sorted.at(-1);
+    selected = Math.max(
+      0,
+      inspectable.findIndex((s) => s.start === seg.start),
+    );
+    announce(Math.max(seg.start, Math.min(time, seg.end)), seg);
+  };
+  svg.addEventListener("pointermove", (e) => chooseAt(e.clientX));
+  svg.addEventListener("pointerdown", (e) => {
+    svg.focus();
+    chooseAt(e.clientX);
+  });
+  svg.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    selected =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? inspectable.length - 1
+          : Math.max(
+              0,
+              Math.min(inspectable.length - 1, selected + (e.key === "ArrowRight" ? 1 : -1)),
+            );
+    const seg = inspectable[selected];
+    announce(seg.start, seg);
+  });
+  const now = Date.now();
+  const active = sorted.find((s) => s.level != null && now >= s.start && now < s.end);
+  if (active) {
+    const nx = x(now);
+    svg.append(
+      make("line", { x1: nx, x2: nx, y1: top, y2: top + plotHeight, class: "timeline-current" }),
+    );
+    announce(now, active);
+  }
+  chart.append(svg);
+  panel.hidden = false;
+}
+
+function renderActivity(entries, timezone) {
+  const box = document.querySelector("#activity"),
+    list = document.querySelector("#activity-list");
+  list.replaceChildren();
+  if (!Array.isArray(entries) || !entries.length) {
+    box.hidden = true;
+    return;
+  }
+  for (const item of entries.slice(0, 12)) {
+    const li = document.createElement("li"),
+      time = document.createElement("time"),
+      detail = document.createElement("span"),
+      outcome = document.createElement("small");
+    const date = new Date(item.at);
+    time.textContent = Number.isNaN(date.getTime())
+      ? String(item.at || "—")
+      : new Intl.DateTimeFormat(undefined, {
+          timeZone: timezone || "UTC",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(date);
+    const level = (v) => (v == null ? "Off" : `${Number(v) > 0 ? "+" : ""}${v}°`);
+    const observed = `Observed ${item.observedAvailable === false ? "—" : level(item.observedLevel)}`;
+    const target = `Scheduled: ${level(item.scheduledLevel)}`;
+    const command = item.commandIssued
+      ? `Set to ${level(item.commandLevel)}`
+      : item.commandAttempted
+        ? `Attempted ${level(item.commandLevel)}`
+        : "No change";
+    const decision = item.manualOverride ? "Manual adjustment respected" : command;
+    detail.textContent = `${observed} · ${target} · ${decision}`;
+    outcome.textContent = item.error ? item.error : (item.outcome || "").replaceAll("_", " ");
+    li.append(time, detail, outcome);
+    list.append(li);
+  }
+  box.hidden = false;
+}

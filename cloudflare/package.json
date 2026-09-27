@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "test": "node --experimental-strip-types --test worker/schedule/engine.test.ts worker/eight/client.test.ts worker/secrets.test.ts worker/http/validation.test.ts worker/scheduler-timing.test.ts",
+    "test": "node --experimental-strip-types --test worker/activity.test.ts worker/schedule/engine.test.ts worker/eight/client.test.ts worker/secrets.test.ts worker/http/validation.test.ts worker/scheduler-timing.test.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'worker/**/*.ts' ui/index.html ui/styles.css && prettier --write ui/app.js.txt --parser babel",
     "deploy": "wrangler deploy"

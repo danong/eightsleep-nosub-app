@@ -19,11 +19,8 @@ function minuteOfDay(value: unknown, name: string): number {
 export function parseSettings(value: unknown): Settings {
   if (!value || typeof value !== "object") throw new InputError("Schedule is required");
   const input = value as Record<string, unknown>;
-  const bedtimeMinutes = minuteOfDay(input.bedtime, "Bedtime");
-  const wakeMinutes = minuteOfDay(input.wakeTime, "Wake time");
-  const duration = (wakeMinutes - bedtimeMinutes + 24 * 60) % (24 * 60);
-  if (duration < 4 * 60 || duration > 16 * 60)
-    throw new InputError("Sleep duration must be between 4 and 16 hours");
+  minuteOfDay(input.bedtime, "Bedtime");
+  minuteOfDay(input.wakeTime, "Wake time");
   if (typeof input.timezone !== "string" || input.timezone.length > 80)
     throw new InputError("A timezone is required");
   try {

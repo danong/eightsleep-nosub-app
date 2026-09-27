@@ -40,6 +40,188 @@ function formatDate(value) {
   }).format(date);
 }
 
+function formatClock(value, timezone) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const showSeconds = date.getSeconds() !== 0;
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: timezone || "UTC",
+      hour: "numeric",
+      minute: "2-digit",
+      ...(showSeconds ? { second: "2-digit" } : {}),
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      ...(showSeconds ? { second: "2-digit" } : {}),
+    }).format(date);
+  }
+}
+
+function renderTimeline(status) {
+  const timeline = status?.timeline;
+  const panel = document.querySelector("#timeline-panel");
+  const timeList = document.querySelector("#phase-time-list");
+  const timeBox = document.querySelector("#phase-times");
+  const chart = document.querySelector("#timeline-chart");
+  const nowLabel = document.querySelector("#timeline-now");
+  timeList.replaceChildren();
+  chart.replaceChildren();
+  nowLabel.hidden = true;
+  const segments = Array.isArray(timeline?.segments)
+    ? timeline.segments
+        .map((segment) => ({
+          ...segment,
+          start: new Date(segment.startAt).getTime(),
+          end: new Date(segment.endAt).getTime(),
+        }))
+        .filter(
+          (segment) =>
+            Number.isFinite(segment.start) &&
+            Number.isFinite(segment.end) &&
+            segment.end >= segment.start,
+        )
+    : [];
+  if (!segments.length) {
+    panel.hidden = true;
+    timeBox.hidden = true;
+    return;
+  }
+
+  const timezone = timeline.timezone || settings?.timezone || "UTC";
+  const phaseOrder = ["preheat", "early", "middle", "late"];
+  const phases = phaseOrder
+    .map((key) => segments.find((segment) => segment.key === key))
+    .filter(Boolean);
+  if (phases.length) {
+    for (const phase of phases) {
+      const row = document.createElement("div");
+      row.className = "phase-time-row";
+      const name = document.createElement("span");
+      name.textContent = phase.label || phase.key;
+      const times = document.createElement("strong");
+      times.textContent =
+        phase.key === "preheat" && phase.start === phase.end
+          ? "No gap before bedtime"
+          : `${formatClock(phase.startAt, timezone)} – ${formatClock(phase.endAt, timezone)}`;
+      row.append(name, times);
+      timeList.append(row);
+    }
+    timeBox.hidden = false;
+  } else {
+    timeBox.hidden = true;
+  }
+
+  const plotted = segments.filter((segment) => segment.end > segment.start);
+  if (!plotted.length) {
+    panel.hidden = true;
+    return;
+  }
+  const minTime = Math.min(...plotted.map((segment) => segment.start));
+  const maxTime = Math.max(...plotted.map((segment) => segment.end));
+  if (!(maxTime > minTime)) {
+    panel.hidden = true;
+    return;
+  }
+  const width = 600;
+  const height = 220;
+  const left = 45;
+  const right = 12;
+  const top = 20;
+  const bottom = 40;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const x = (time) => left + ((time - minTime) / (maxTime - minTime)) * plotWidth;
+  const y = (level) => top + ((10 - (level == null ? -13 : Number(level))) / 24) * plotHeight;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Scheduled temperature target levels over time");
+  svg.classList.add("timeline-svg");
+  const make = (name, attrs) => {
+    const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, String(value));
+    return element;
+  };
+  for (const level of [-10, 0, 10]) {
+    const yy = y(level);
+    svg.append(
+      make("line", { x1: left, x2: width - right, y1: yy, y2: yy, class: "timeline-grid" }),
+    );
+    const label = make("text", {
+      x: left - 10,
+      y: yy + 4,
+      "text-anchor": "end",
+      class: "timeline-axis",
+    });
+    label.textContent = String(level);
+    svg.append(label);
+  }
+  const offLabel = make("text", {
+    x: left - 10,
+    y: y(null) + 4,
+    "text-anchor": "end",
+    class: "timeline-axis timeline-off-label",
+  });
+  offLabel.textContent = "Off";
+  svg.append(offLabel);
+  const sorted = [...plotted].sort((a, b) => a.start - b.start);
+  let previousLevel = null;
+  let hasPrevious = false;
+  sorted.forEach((segment) => {
+    const x1 = x(segment.start);
+    const x2 = x(segment.end);
+    const yy = y(segment.level);
+    const startY = hasPrevious ? y(previousLevel) : yy;
+    const segmentPath = make("path", {
+      d: `M ${x1} ${startY} V ${yy} H ${x2}`,
+      class:
+        segment.key === "off" || (segment.key === "padding" && segment.level == null)
+          ? "timeline-line timeline-off-segment"
+          : "timeline-line",
+    });
+    svg.append(segmentPath);
+    previousLevel = segment.level;
+    hasPrevious = true;
+  });
+  const startText = make("text", { x: left, y: height - 12, class: "timeline-axis" });
+  startText.textContent = formatClock(minTime, timezone);
+  const endText = make("text", {
+    x: width - right,
+    y: height - 12,
+    "text-anchor": "end",
+    class: "timeline-axis",
+  });
+  endText.textContent = formatClock(maxTime, timezone);
+  svg.append(startText, endText);
+
+  const now = Date.now();
+  const active = sorted.find(
+    (segment) =>
+      !["off", "padding"].includes(segment.key) && now >= segment.start && now < segment.end,
+  );
+  if (active) {
+    const nowX = x(now);
+    svg.append(
+      make("line", {
+        x1: nowX,
+        x2: nowX,
+        y1: top,
+        y2: top + plotHeight,
+        class: "timeline-current",
+      }),
+    );
+    const point = make("circle", { cx: nowX, cy: y(active.level), r: 5, class: "timeline-point" });
+    svg.append(point);
+    nowLabel.textContent = `Now · ${formatClock(now, timezone)} · scheduled level ${Number(active.level) > 0 ? "+" : ""}${active.level}`;
+    nowLabel.hidden = false;
+  }
+  chart.append(svg);
+  panel.hidden = false;
+}
+
 function setOptions(select, zones) {
   const list = zones?.length
     ? zones
@@ -77,6 +259,7 @@ function applySettings(value) {
 
 function renderStatus(status) {
   currentStatus = { ...currentStatus, ...status };
+  renderTimeline(currentStatus);
   paused = Boolean(currentStatus.paused);
   const connected = Boolean(currentStatus.connected);
   const configured = Boolean(currentStatus.configured);
@@ -115,7 +298,7 @@ function renderStatus(status) {
     : "";
   runError.hidden = !currentStatus.lastError;
   document.querySelector("#save-hint").textContent = controlEnabled
-    ? "Changes take effect at your next scheduled run."
+    ? "Saved changes are reconciled with the bed within about a minute."
     : "Schedule saved for preview. Bed control is currently off.";
 }
 
@@ -160,7 +343,7 @@ form.addEventListener("submit", async (event) => {
     renderStatus(await request("/api/status"));
     setNotice(
       currentStatus.controlEnabled
-        ? "Schedule saved. Your next run will use these settings."
+        ? "Schedule saved. Bed settings will be reconciled shortly."
         : "Schedule saved in preview mode. Bed control is off.",
     );
   } catch (error) {
@@ -225,3 +408,4 @@ connectForm.addEventListener("submit", async (event) => {
 });
 
 load();
+window.setInterval(() => renderTimeline(currentStatus), 60_000);

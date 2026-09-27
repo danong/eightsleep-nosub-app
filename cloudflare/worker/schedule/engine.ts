@@ -56,6 +56,18 @@ interface Cycle {
   wake: number;
   nextPreheat: number;
 }
+export interface TimelineSegment {
+  key: "preheat" | "early" | "middle" | "late" | "off" | "padding";
+  label: string;
+  startAt: string;
+  endAt: string;
+  level: HeatingLevel;
+}
+export interface ScheduleTimeline {
+  timezone: string;
+  cycleId: string;
+  segments: TimelineSegment[];
+}
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
@@ -169,17 +181,97 @@ function cycleForDate(date: WallTime, profile: ScheduleProfile): Cycle {
   const bed = resolveWall(bedWall, profile.timezone);
   const wake = resolveWall(wakeWall, profile.timezone);
   const nextBed = resolveWall({ ...dateShift(date, 1), ...bedClock }, profile.timezone);
-  const wallDuration = wallStamp(wakeWall) - wallStamp(bedWall);
-  if (wallDuration < 4 * HOUR || wallDuration >= 24 * HOUR)
-    throw new Error("Sleep interval must be at least 4 hours and less than 24 hours");
+  const previousWakeDate =
+    wakeClock.hour * 60 + wakeClock.minute <= bedClock.hour * 60 + bedClock.minute
+      ? date
+      : dateShift(date, -1);
+  const previousWake = resolveWall({ ...previousWakeDate, ...wakeClock }, profile.timezone);
+  const duration = wake - bed;
+  // Preserve the familiar one-hour early and two-hour late phases where
+  // possible. Short schedules divide the available sleep into three phases;
+  // the middle phase absorbs extra time on long schedules.
+  const earlyDuration = Math.min(HOUR, duration / 3);
+  const lateDuration = Math.min(2 * HOUR, duration / 3);
+  const middle = bed + earlyDuration;
+  const late = wake - lateDuration;
   return {
     id: new Date(bed).toISOString(),
     bed,
-    preheat: bed - HOUR,
-    middle: bed + HOUR,
-    late: wake - 2 * HOUR,
+    preheat: Math.max(bed - HOUR, previousWake),
+    middle,
+    late,
     wake,
-    nextPreheat: nextBed - HOUR,
+    nextPreheat: Math.max(nextBed - HOUR, wake),
+  };
+}
+
+/** Display the selected cycle with one hour of real scheduled context either side. */
+export function scheduleTimeline(profile: ScheduleProfile, now: Date): ScheduleTimeline {
+  let cycle = findCycle(now, profile);
+  if (now.getTime() > cycle.wake + HOUR) {
+    cycle = cycleForDate(dateShift(partsAt(cycle.bed, profile.timezone), 1), profile);
+  }
+  const stamp = (instant: number) => new Date(instant).toISOString();
+  const padStart = cycle.preheat - HOUR;
+  const padEnd = cycle.wake + HOUR;
+  const local = partsAt(cycle.bed, profile.timezone);
+  const nearby = [-2, -1, 0, 1, 2]
+    .map((offset) => cycleForDate(dateShift(local, offset), profile))
+    .flatMap((item) => [item.preheat, item.bed, item.middle, item.late, item.wake])
+    .filter((instant) => instant > padStart && instant < padEnd);
+  const boundaries = [...new Set([padStart, ...nearby, padEnd])].sort((a, b) => a - b);
+  const padding: TimelineSegment[] = [];
+  for (let index = 0; index < boundaries.length - 1; index++) {
+    const start = boundaries[index]!;
+    const end = boundaries[index + 1]!;
+    if (end <= cycle.preheat || start >= cycle.wake) {
+      const sample = start + (end - start) / 2;
+      const actualCycle = findCycle(new Date(sample), profile);
+      const level = stageAt(sample, actualCycle, profile).level;
+      padding.push({
+        key: "padding",
+        label: level === null ? "Off" : "Scheduled",
+        startAt: stamp(start),
+        endAt: stamp(end),
+        level,
+      });
+    }
+  }
+  return {
+    timezone: profile.timezone,
+    cycleId: cycle.id,
+    segments: [
+      ...padding.filter((segment) => Date.parse(segment.endAt) <= cycle.preheat),
+      {
+        key: "preheat",
+        label: "Preheat",
+        startAt: stamp(cycle.preheat),
+        endAt: stamp(cycle.bed),
+        level: profile.levels.early,
+      },
+      {
+        key: "early",
+        label: "Early sleep",
+        startAt: stamp(cycle.bed),
+        endAt: stamp(cycle.middle),
+        level: profile.levels.early,
+      },
+      {
+        key: "middle",
+        label: "Mid sleep",
+        startAt: stamp(cycle.middle),
+        endAt: stamp(cycle.late),
+        level: profile.levels.middle,
+      },
+      {
+        key: "late",
+        label: "Late sleep",
+        startAt: stamp(cycle.late),
+        endAt: stamp(cycle.wake),
+        level: profile.levels.late,
+      },
+      ...padding.filter((segment) => Date.parse(segment.startAt) >= cycle.wake),
+    ],
   };
 }
 
@@ -204,10 +296,10 @@ function findCycle(now: Date, profile: ScheduleProfile): Cycle {
  *
  * Keep this API expressed in terms of control transitions rather than stage
  * names. The current schedule is represented as a set of candidate boundaries;
- * a boundary is actionable only when the target immediately before it differs
- * from the target at it. That naturally omits bedtime, where preheat and sleep
- * currently share a level, and allows the phase model to be replaced without
- * changing callers such as the scheduler Durable Object.
+ * A boundary is actionable when the target changes, or when it starts a new
+ * cycle. The cycle-start exception resets manual overrides even for continuous
+ * all-day targets. Other same-target phase boundaries, such as bedtime, are
+ * skipped.
  */
 export function nextControlAt(profile: ScheduleProfile, now: Date): Date {
   if (!Number.isFinite(now.getTime())) throw new Error("Invalid current time");
@@ -220,11 +312,20 @@ export function nextControlAt(profile: ScheduleProfile, now: Date): Date {
     .sort((a, b) => a - b);
 
   for (const instant of boundaries) {
-    const cycle = findCycle(new Date(instant), profile);
-    const before = stageAt(instant - 1, cycle, profile).level;
-    const after = stageAt(instant, cycle, profile).level;
-    if (before !== after) return new Date(instant);
+    const beforeCycle = findCycle(new Date(instant - 1), profile);
+    const afterCycle = findCycle(new Date(instant), profile);
+    const before = stageAt(instant - 1, beforeCycle, profile).level;
+    const after = stageAt(instant, afterCycle, profile).level;
+    if (before !== after || (beforeCycle.id !== afterCycle.id && instant === afterCycle.preheat))
+      return new Date(instant);
   }
+  // Keep a daily cycle-start reconciliation even when the target is constant.
+  const maintenance = boundaries.find((instant) => {
+    if (instant <= now.getTime()) return false;
+    const afterCycle = findCycle(new Date(instant), profile);
+    return instant === afterCycle.preheat;
+  });
+  if (maintenance !== undefined) return new Date(maintenance);
   throw new Error("Could not find next schedule control event");
 }
 

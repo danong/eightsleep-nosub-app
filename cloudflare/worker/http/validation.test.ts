@@ -13,9 +13,16 @@ test("accepts an overnight schedule with the three UI levels", () => {
   assert.deepEqual(parseSettings(valid), valid);
 });
 
-test("rejects invalid times, zones, durations, and out of range levels", () => {
+test("accepts all valid clock pairs and rejects invalid times, zones, and levels", () => {
   assert.throws(() => parseSettings({ ...valid, bedtime: "25:00" }));
-  assert.throws(() => parseSettings({ ...valid, wakeTime: "01:00" }));
+  for (const [bedtime, wakeTime] of [
+    ["22:00", "23:00"],
+    ["22:00", "01:00"],
+    ["22:00", "16:00"],
+    ["22:00", "21:30"],
+    ["22:00", "22:00"],
+  ])
+    assert.equal(parseSettings({ ...valid, bedtime, wakeTime }).wakeTime, wakeTime);
   assert.throws(() => parseSettings({ ...valid, timezone: "Invalid/Zone" }));
   assert.throws(() => parseSettings({ ...valid, levels: { ...valid.levels, late: 11 } }));
 });

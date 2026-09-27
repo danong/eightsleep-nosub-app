@@ -174,11 +174,35 @@
               />
             </div>
           </div>
+          <div class="phase-times" id="phase-times" aria-live="polite" hidden>
+            <p class="field-label">SCHEDULE TIMING</p>
+            <p class="phase-times-note">Times reflect the saved schedule. Save edits to refresh.</p>
+            <div id="phase-time-list"></div>
+          </div>
           <button class="button button-primary save-button" id="save-button" type="submit">
             <span>Save schedule</span><span aria-hidden="true">↗</span>
           </button>
           <p class="save-hint" id="save-hint">Changes take effect at your next scheduled run.</p>
         </form>
+      </section>
+      <section
+        class="panel timeline-panel"
+        id="timeline-panel"
+        aria-labelledby="timeline-title"
+        hidden
+      >
+        <div class="panel-heading">
+          <div>
+            <p class="card-kicker">OVERNIGHT PLAN</p>
+            <h2 id="timeline-title">Scheduled temperature</h2>
+          </div>
+        </div>
+        <p class="timeline-caption">
+          Scheduled target levels in your selected time zone. This is not a live reading from the
+          bed.
+        </p>
+        <div class="timeline-chart" id="timeline-chart"></div>
+        <p class="timeline-now" id="timeline-now" hidden></p>
       </section>
       <section class="panel account-panel" aria-labelledby="account-title">
         <div class="account-copy">

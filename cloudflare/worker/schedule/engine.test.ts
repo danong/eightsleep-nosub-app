@@ -4,6 +4,7 @@ import {
   nextControlAt,
   previewSchedule,
   reconcileSchedule,
+  scheduleTimeline,
   type ScheduleProfile,
   type ScheduleState,
 } from "./engine.ts";
@@ -72,7 +73,7 @@ test("overnight schedule selects preheat, bed, middle, late, then off boundaries
   }
 });
 
-test("every cron tick reconciles drift and reports next schedule action", () => {
+test("each scheduler run reconciles drift and reports next schedule action", () => {
   const result = reconcileSchedule({
     profile,
     now: at("2025-01-15T03:20:00Z"),
@@ -83,6 +84,95 @@ test("every cron tick reconciles drift and reports next schedule action", () => 
   assert.equal(result.command, 1);
   assert.equal(result.nextActionLabel, "Middle stage");
   assert.equal(result.nextActionAt.toISOString(), "2025-01-15T04:00:00.000Z");
+});
+
+test("short and long schedules have contiguous positive phases", () => {
+  for (const [wakeTime, hours] of [
+    ["23:00", 1],
+    ["01:00", 3],
+    ["16:00", 18],
+    ["21:30", 23.5],
+    ["22:00", 24],
+  ] as const) {
+    const testProfile: ScheduleProfile = {
+      bedtime: "22:00",
+      wakeTime,
+      timezone: "UTC",
+      levels: { early: 1, middle: 0, late: -1 },
+    };
+    const timeline = scheduleTimeline(testProfile, at("2025-01-15T00:00:00Z"));
+    const sleep = timeline.segments.slice(2, 5);
+    assert.deepEqual(
+      sleep.map((segment) => segment.key),
+      ["early", "middle", "late"],
+    );
+    for (let index = 0; index < timeline.segments.length - 1; index++)
+      assert.equal(timeline.segments[index]!.endAt, timeline.segments[index + 1]!.startAt);
+    for (const segment of sleep)
+      assert.ok(
+        Date.parse(segment.endAt) > Date.parse(segment.startAt),
+        `${hours}h ${segment.key}`,
+      );
+    assert.equal((Date.parse(sleep[2]!.endAt) - Date.parse(sleep[0]!.startAt)) / 3_600_000, hours);
+  }
+});
+
+test("phase times follow resolved DST wall times", () => {
+  const dstProfile = {
+    ...profile,
+    bedtime: "22:00",
+    wakeTime: "06:00",
+    timezone: "America/New_York",
+  };
+  const timeline = scheduleTimeline(dstProfile, at("2025-03-09T04:00:00Z"));
+  const sleep = timeline.segments.slice(2, 5);
+  assert.equal(sleep[0]!.startAt, "2025-03-09T03:00:00.000Z");
+  assert.equal(sleep[2]!.endAt, "2025-03-09T10:00:00.000Z");
+});
+
+test("long cycles clip preheat to the prior wake and continue at the next wake", () => {
+  for (const [wakeTime, bedStart, bedtime, wake] of [
+    ["21:30", "2025-01-14T21:30:00.000Z", "2025-01-14T22:00:00.000Z", "2025-01-15T21:30:00.000Z"],
+    ["22:00", "2025-01-14T22:00:00.000Z", "2025-01-14T22:00:00.000Z", "2025-01-15T22:00:00.000Z"],
+  ] as const) {
+    const longProfile: ScheduleProfile = {
+      bedtime: "22:00",
+      wakeTime,
+      timezone: "UTC",
+      levels: { early: 2, middle: 0, late: -2 },
+    };
+    const timeline = scheduleTimeline(longProfile, at("2025-01-15T00:00:00Z"));
+    const preheat = timeline.segments.find((segment) => segment.key === "preheat")!;
+    assert.equal(preheat.startAt, bedStart);
+    assert.equal(preheat.endAt, bedtime);
+    const late = timeline.segments.find((segment) => segment.key === "late")!;
+    assert.equal(late.endAt, wake);
+    const following = scheduleTimeline(longProfile, at(wake));
+    assert.equal(following.cycleId, new Date(Date.parse(bedtime) + 24 * 60 * 60_000).toISOString());
+    assert.equal(nextControlAt(longProfile, at("2025-01-15T20:00:00Z")).toISOString(), wake);
+  }
+});
+
+test("constant-level 24-hour schedule wakes only at the next daily cycle boundary", () => {
+  const allDay: ScheduleProfile = {
+    bedtime: "22:00",
+    wakeTime: "22:00",
+    timezone: "UTC",
+    levels: { early: 0, middle: 0, late: 0 },
+  };
+  assert.equal(
+    nextControlAt(allDay, at("2025-01-15T00:00:00Z")).toISOString(),
+    "2025-01-15T22:00:00.000Z",
+  );
+  const preview = previewSchedule(allDay, at("2025-01-15T00:00:00Z"));
+  assert.equal(preview.stage, "middle");
+  const timeline = scheduleTimeline(allDay, at("2025-01-15T00:00:00Z"));
+  assert.equal(
+    timeline.segments.find((segment) => segment.key === "preheat")!.startAt,
+    timeline.segments.find((segment) => segment.key === "preheat")!.endAt,
+  );
+  assert.equal(timeline.segments[0]!.key, "padding");
+  assert.equal(timeline.segments[0]!.level, 0); // prior late level, represented as the actual padding target
 });
 
 test("manual level and manual off persist for cycle, then reset at next preheat", () => {
@@ -156,12 +246,12 @@ test("spring-forward nonexistent bedtime advances to first valid wall minute", (
   assert.equal(result.stage, "early");
 });
 
-test("four-hour wall interval remains valid when spring-forward shortens elapsed time", () => {
+test("short spring-forward interval keeps three monotonic phases", () => {
   const shortDstProfile = { ...profile, bedtime: "01:00", wakeTime: "05:00" };
   const result = previewSchedule(shortDstProfile, at("2025-03-09T07:30:00Z"));
-  assert.equal(result.stage, "late");
-  assert.equal(result.nextActionLabel, "Wake");
-  assert.equal(result.nextActionAt.toISOString(), "2025-03-09T09:00:00.000Z");
+  assert.equal(result.stage, "middle");
+  assert.equal(result.nextActionLabel, "Late stage");
+  assert.equal(result.nextActionAt.toISOString(), "2025-03-09T08:00:00.000Z");
 });
 
 test("wake has a concrete off transition and does not issue a stage write", () => {

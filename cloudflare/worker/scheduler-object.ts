@@ -1,7 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import { EightApiError, EightClient, type EightToken } from "./eight";
 import type { Env } from "./env";
-import { nextControlAt, previewSchedule, reconcileSchedule } from "./schedule/engine";
+import {
+  nextControlAt,
+  previewSchedule,
+  reconcileSchedule,
+  scheduleTimeline,
+  type ScheduleTimeline,
+} from "./schedule/engine";
 import {
   newAccount,
   readToken,
@@ -25,6 +31,7 @@ type PublicStatus = {
   lastError: string | null;
   nextActionAt: string | null;
   nextActionLabel: string | null;
+  timeline: ScheduleTimeline | null;
 };
 
 export class SchedulerObject extends DurableObject<Env> {
@@ -43,8 +50,10 @@ export class SchedulerObject extends DurableObject<Env> {
     const account = await this.load(email);
     let nextActionAt: string | null = null;
     let nextActionLabel: string | null = null;
+    const now = new Date();
+    const timeline = account.configured ? scheduleTimeline(account.settings, now) : null;
     if (account.configured) {
-      const at = nextControlAt(account.settings, new Date());
+      const at = nextControlAt(account.settings, now);
       const preview = previewSchedule(account.settings, new Date(at.getTime() - 1_000));
       nextActionAt = at.toISOString();
       nextActionLabel = preview.nextActionLabel;
@@ -58,6 +67,7 @@ export class SchedulerObject extends DurableObject<Env> {
       lastError: account.lastError,
       nextActionAt,
       nextActionLabel,
+      timeline,
     };
   }
 

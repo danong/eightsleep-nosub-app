@@ -4,7 +4,7 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-25",
   "workers_dev": true,
-  "vars": { "CONTROL_ENABLED": "false" },
+  "vars": { "CONTROL_ENABLED": "true" },
   "secrets": { "required": ["TOKEN_KEY"] },
   "durable_objects": {
     "bindings": [{ "name": "SCHEDULER", "class_name": "SchedulerObject" }],

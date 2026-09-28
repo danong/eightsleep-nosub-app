@@ -9,6 +9,12 @@
   "durable_objects": {
     "bindings": [{ "name": "SCHEDULER", "class_name": "SchedulerObject" }],
   },
+  "previews": {
+    "vars": { "CONTROL_ENABLED": "false" },
+    "durable_objects": {
+      "bindings": [{ "name": "SCHEDULER", "class_name": "SchedulerObject" }],
+    },
+  },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SchedulerObject"] }],
   "access": {
     "dev": {

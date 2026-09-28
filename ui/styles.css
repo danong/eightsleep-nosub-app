@@ -239,10 +239,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   font-size: 11px;
   color: var(--muted);
 }
-.unit {
-  font-size: 16px;
-  color: var(--dim);
-}
 .levels {
   margin-top: 7px;
 }
@@ -297,14 +293,14 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   stroke-width: 1;
   stroke-dasharray: 2 3;
 }
-.timeline-change-label {
-  font-size: 10px;
-}
 .timeline-axis {
   fill: #8995a6;
   font:
     11px system-ui,
     sans-serif;
+}
+.timeline-change-label {
+  font-size: 10px;
 }
 .timeline-line {
   fill: none;

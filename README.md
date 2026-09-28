@@ -14,6 +14,8 @@ Wrangler stores local Durable Object data in `.wrangler/`. Both `.dev.vars` and 
 
 Run `npm run deploy` from the repository root. `wrangler.jsonc` deploys the `eight-sleep-control` Worker with `CONTROL_ENABLED=true` and the existing `SchedulerObject` binding. Moving the source to the repository root does not create a new Worker or move its remote Durable Object data.
 
+For Cloudflare Workers Git builds, use this repository root, leave the build command empty, set the deploy command to `npx wrangler deploy`, and set the preview command to `npx wrangler preview`. The Preview configuration uses separate Durable Object storage and `CONTROL_ENABLED=false`; a Preview still needs its own `TOKEN_KEY` secret and Access protection if you intend to sign in there.
+
 Keep `TOKEN_KEY` configured as a Worker secret. It encrypts stored Eight Sleep tokens; changing or losing it requires each user to reconnect. Protect every Worker URL, including `workers.dev` and preview URLs, with Cloudflare Access. The Worker rejects requests without an Access identity. The custom domain is `sleep.danong.dev`.
 
 To stop bed control, set `CONTROL_ENABLED` to `false` in `wrangler.jsonc` and deploy again. Leave it disabled until the issue is resolved.

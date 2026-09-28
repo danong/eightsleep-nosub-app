@@ -31,7 +31,13 @@ export default {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/api/")) return handleApi(request, env, email);
     if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
-    if (path === "/" || path === "/index.html") return asset(html, "text/html; charset=utf-8");
+    if (path === "/" || path === "/index.html") {
+      const versionId = env.CF_VERSION_METADATA?.id || "local";
+      const page = html
+        .replace("{{workerVersionId}}", versionId)
+        .replace("{{workerVersionShort}}", versionId.slice(0, 8));
+      return asset(page, "text/html; charset=utf-8");
+    }
     if (path === "/styles.css") return asset(css, "text/css; charset=utf-8");
     if (path === "/app.js") return asset(script, "text/javascript; charset=utf-8");
     if (path === "/timeline.js") return asset(timelineScript, "text/javascript; charset=utf-8");

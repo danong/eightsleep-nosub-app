@@ -501,9 +501,6 @@ footer {
   color: var(--dim);
   font-size: 10px;
 }
-footer:has(> :only-child) {
-  justify-content: flex-end;
-}
 .notice {
   padding: 12px 14px;
   margin: 0 0 13px;

@@ -131,7 +131,11 @@ export function renderTimeline(status, settings) {
     for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));
     return el;
   };
-  const ticks = [...new Set([low, (low + high) / 2, high])];
+  const lowestLevel = Math.min(...levels);
+  const highestLevel = Math.max(...levels);
+  const ticks = levels.length
+    ? [...new Set([lowestLevel, Math.round((lowestLevel + highestLevel) / 2), highestLevel])]
+    : [];
   for (const level of ticks) {
     const yy = y(level);
     svg.append(
@@ -143,7 +147,7 @@ export function renderTimeline(status, settings) {
       "text-anchor": "end",
       class: "timeline-axis",
     });
-    label.textContent = formatLevel(Number(level.toFixed(1)));
+    label.textContent = formatLevel(level);
     svg.append(label);
   }
   const offY = y(null);

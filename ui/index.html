@@ -203,7 +203,10 @@
         </div>
         <button class="button button-outline" id="connect-button" type="button">Reconnect</button>
       </section>
-      <footer><span id="last-run">Last run · —</span></footer>
+      <footer>
+        <span id="last-run">Last run · —</span>
+        <span title="Worker version {{workerVersionId}}">Build {{workerVersionShort}}</span>
+      </footer>
     </main>
     <dialog id="connect-dialog" class="dialog" aria-labelledby="connect-title">
       <form id="connect-form" method="dialog">

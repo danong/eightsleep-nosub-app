@@ -1,8 +1,12 @@
 # Nightshift
 
-A Cloudflare Worker that schedules an Eight Sleep bed without an Eight Sleep subscription. Cloudflare Access identifies each user. One SQLite-backed Durable Object stores both users' settings and encrypted Eight Sleep tokens, and its alarm wakes at the next schedule change. The Worker serves the UI and API from this repository.
+A WebApp that allows users to schedule an Eight Sleep Pod without an Eight Sleep subscription. 
+
+<img src="nightshift.png" alt="Nightshift Screenshot">
 
 Each user chooses a bedtime, wake time, time zone, and early, middle, and late levels. The app derives the phase times and starts preheat up to one hour before bedtime. Physical or Eight Sleep app adjustments during sleep are respected until wake; daytime adjustments persist until the next preheat. The UI shows recent scheduler checks, observed bed settings, and commands. These observations come from scheduled runs; the app does not poll the bed.
+
+This runs on Cloudflare's free tier. Cloudflare Access identifies each user. One SQLite-backed Durable Object stores both users' settings and encrypted Eight Sleep tokens, and its alarm wakes at the next schedule change. The Worker serves the UI and API from this repository.
 
 ## Develop
 

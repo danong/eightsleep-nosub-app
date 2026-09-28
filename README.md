@@ -16,13 +16,16 @@ Wrangler stores local Durable Object data in `.wrangler/`. Both `.dev.vars` and 
 
 ## Deploy
 
-Run `npm run deploy` from the repository root. `wrangler.jsonc` deploys the `eight-sleep-control` Worker with `CONTROL_ENABLED=true` and the existing `SchedulerObject` binding. Moving the source to the repository root does not create a new Worker or move its remote Durable Object data.
+You need GitHub and Cloudflare accounts. These steps use only your browser:
 
-For Cloudflare Workers Git builds, use this repository root, leave the build command empty, set the deploy command to `npx wrangler deploy`, and set the preview command to `npx wrangler preview`. The Preview configuration uses separate Durable Object storage and `CONTROL_ENABLED=false`; a Preview still needs its own `TOKEN_KEY` secret and Access protection if you intend to sign in there.
+1. Open the [token key generator](https://sleep-demo.danong.dev/token-key.html). Copy the 64-character key and keep a private backup. The page generates it in your browser and sends it nowhere. This key encrypts stored Eight Sleep tokens; changing or losing it requires each user to reconnect.
+2. Click [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/danong/eightsleep-nosub-app) and sign in to GitHub and Cloudflare when prompted. Cloudflare copies the repository into your GitHub account and provisions the Durable Object. On the setup screen, paste the key into the `TOKEN_KEY` secret field.
+3. Choose a Worker name, then deploy. Cloudflare gives it a `https://<worker-name>.<your-subdomain>.workers.dev` URL. The app requires Cloudflare Access, so it will return 403 until you finish the next step.
+4. In Cloudflare, open **Workers & Pages → your Worker → Access → Protect this Worker behind Access**. Choose **All traffic** (including production and previews). Configure an **Allow** policy that includes only the specific email addresses allowed to control the bed, then select **Apply Access**. Use a sign-in method available to those addresses. [Worker-level Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/) protects the Worker across its `workers.dev` URL, custom domains, and previews; a hostname-only policy does not cover every URL.
+5. Open the `workers.dev` URL from step 3 and sign in through Access. The Nightshift settings page should load under your email address.
+6. Connect your Eight Sleep account, choose a bedtime, wake time, time zone, and temperature levels, then save the schedule. The deployed Worker has bed control enabled.
 
-Keep `TOKEN_KEY` configured as a Worker secret. It encrypts stored Eight Sleep tokens; changing or losing it requires each user to reconnect. Protect every Worker URL, including `workers.dev` and preview URLs, with Cloudflare Access. The Worker rejects requests without an Access identity. The custom domain is `sleep.danong.dev`.
-
-To stop bed control, set `CONTROL_ENABLED` to `false` in `wrangler.jsonc` and deploy again. Leave it disabled until the issue is resolved.
+Optional: You can add a custom domain after Access is in place. For Workers Git builds, use this repository root, leave the build command empty, set the deploy command to `npx wrangler deploy`, and set the preview command to `npx wrangler preview`. Previews have separate Durable Object storage and `CONTROL_ENABLED=false`; they need a `TOKEN_KEY` secret and Access to sign in. This repository's existing `eight-sleep-control` Worker can still be updated with `npm run deploy`; its `SchedulerObject` binding and remote data stay in place. Before updating it, confirm Worker-level Access covers **All traffic**, since `workers_dev=true` enables a new URL. To stop bed control, set `CONTROL_ENABLED` to `false` in `wrangler.jsonc` and deploy again.
 
 ## Code map
 

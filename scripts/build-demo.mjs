@@ -52,6 +52,9 @@ for (const [source, target] of [
 ]) {
   await writeFile(path.join(output, target), await readFile(path.join(root, "ui", source)));
 }
+for (const name of ["token-key.html", "token-key.css", "token-key.js"]) {
+  await writeFile(path.join(output, name), await readFile(path.join(root, "demo", name)));
+}
 const scheduleSource = await readFile(path.join(root, "worker/schedule/engine.ts"), "utf8");
 const scheduleScript = (
   await transform(scheduleSource, { loader: "ts", format: "esm", target: "es2022" })

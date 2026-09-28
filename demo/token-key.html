@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'"
+    />
+    <title>Nightshift · Token key generator</title>
+    <link rel="stylesheet" href="/token-key.css" />
+    <script src="/token-key.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <p><a href="/">← Nightshift demo</a></p>
+      <h1>Generate your token key</h1>
+      <p>
+        This key encrypts your Eight Sleep tokens. It is generated in your browser and is not sent
+        anywhere. Save it somewhere private; changing or losing it means you must reconnect your
+        Eight Sleep account.
+      </p>
+      <output id="key" aria-label="Generated token key"></output>
+      <button id="copy" type="button">Copy key</button>
+      <button id="generate" type="button">Generate another</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+  </body>
+</html>

@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { EightApiError, EightClient, type EightToken } from "./eight";
+import { EightApiError, EightClient, observedTargetLevel, type EightToken } from "./eight";
 import type { Env } from "./env";
 import {
   nextControlAt,
@@ -186,7 +186,7 @@ export class SchedulerObject extends DurableObject<Env> {
       status = await this.client.getHeatingStatus(token);
     }
     await this.assertCurrent(account.email, generation);
-    const observedLevel = status.isHeating ? status.heatingLevel / 10 : null;
+    const observedLevel = observedTargetLevel(status);
     const scheduledLevel = previewSchedule(account.settings, now).desiredLevel;
     const result = reconcileSchedule({
       profile: account.settings,

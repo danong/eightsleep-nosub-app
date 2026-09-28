@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EightClient, EightApiError } from "./index.ts";
-import type { EightToken } from "./types.ts";
+import { EightClient, EightApiError, observedTargetLevel } from "./index.ts";
+import type { EightToken, HeatingStatus } from "./types.ts";
 
 const token: EightToken = {
   accessToken: "access",
@@ -63,7 +63,7 @@ test("login and refresh return stored token fields and use the expected grants",
 test("default fetch is called with the Workers global receiver", async () => {
   const originalFetch = globalThis.fetch;
   let receiver: unknown;
-  globalThis.fetch = (function (this: unknown) {
+  globalThis.fetch = function (this: unknown) {
     receiver = this;
     return Promise.resolve(
       jsonResponse({
@@ -73,7 +73,7 @@ test("default fetch is called with the Workers global receiver", async () => {
         userId: "user-1",
       }),
     );
-  } as typeof fetch);
+  } as typeof fetch;
   try {
     await new EightClient().login("person@example.com", "pw");
     assert.equal(receiver, globalThis);
@@ -82,11 +82,11 @@ test("default fetch is called with the Workers global receiver", async () => {
   }
 });
 
-test("heating status selects the requested user side, with legacy solo behavior", async () => {
-  for (const [requestedSide, expectedSide, expectedLevel] of [
-    ["left", "left", 7],
-    ["right", "right", -4],
-    ["solo", "solo", -4],
+test("heating status selects the requested user side and keeps current and target separate", async () => {
+  for (const [requestedSide, expectedSide, currentLevel, targetLevel] of [
+    ["left", "left", 7, 9],
+    ["right", "right", -4, -6],
+    ["solo", "solo", -4, -6],
   ] as const) {
     const urls: string[] = [];
     const client = new EightClient({
@@ -104,10 +104,23 @@ test("heating status selects the requested user side, with legacy solo behavior"
 
     const status = await client.getHeatingStatus(token);
     assert.equal(status.side, expectedSide);
-    assert.equal(status.heatingLevel, expectedLevel);
+    assert.equal(status.heatingLevel, currentLevel);
+    assert.equal(status.targetHeatingLevel, targetLevel);
     assert.equal(urls.length, 2);
     assert.ok(urls[1]?.includes("bed%20id"));
   }
+});
+
+test("reconciliation observes the selected target, not the changing current level", () => {
+  const status: HeatingStatus = {
+    side: "left",
+    heatingLevel: -9,
+    targetHeatingLevel: -10,
+    isHeating: true,
+    heatingDuration: 0,
+  };
+  assert.equal(observedTargetLevel(status), -1);
+  assert.equal(observedTargetLevel({ ...status, isHeating: false }), null);
 });
 
 test("GET retries one transient failure and throws after the bounded retry", async () => {

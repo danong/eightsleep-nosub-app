@@ -5,6 +5,11 @@ import { EightApiError, type BedSide, type EightToken, type HeatingStatus } from
 export type { BedSide, EightToken, HeatingStatus } from "./types.ts";
 export { EightApiError } from "./types.ts";
 
+/** The selected bed setting, in the app's -10 to +10 scale. */
+export function observedTargetLevel(status: HeatingStatus): number | null {
+  return status.isHeating ? status.targetHeatingLevel / 10 : null;
+}
+
 export interface EightClientOptions {
   fetch?: typeof fetch;
   timeoutMs?: number;

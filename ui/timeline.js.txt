@@ -329,7 +329,11 @@ function renderActivity(entries, timezone) {
       : item.commandAttempted
         ? `Attempted ${formatLevel(item.commandLevel)}`
         : "No change";
-    const decision = item.manualOverride ? "Manual adjustment respected" : command;
+    const decision = item.manualOverride
+      ? item.observedLevel === item.scheduledLevel
+        ? "Manual change matched schedule"
+        : "Manual adjustment respected"
+      : command;
     detail.textContent = `${observed} · ${target} · ${decision}`;
     outcome.textContent = item.error ? item.error : (item.outcome || "").replaceAll("_", " ");
     li.append(time, detail, outcome);

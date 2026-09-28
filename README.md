@@ -14,14 +14,6 @@ Use Node 24 or later. Run `npm ci`, `npm test`, and `npm run typecheck` from the
 
 Wrangler stores local Durable Object data in `.wrangler/`. Both `.dev.vars` and `.wrangler/` are ignored by Git.
 
-## Public demo
-
-Run `npm run build:demo` to generate `dist-demo/` from the shared `ui/` files. The output contains only static files. Its demo mode shows the unconnected interface, lets visitors explore the schedule controls locally, and disables saving and account connection. It makes no API requests, includes no account data, and has a static Content Security Policy that blocks network connections and form submissions. The generated directory is ignored by Git.
-
-To publish at `sleep-demo.danong.dev`, create a separate **Cloudflare Pages** project connected to this Git repository. Choose no framework preset, the repository root as the root directory, `npm run build:demo` as the build command, and `dist-demo` as the output directory. Set `NODE_VERSION` to `24` or later. Select the production branch used for this repository and leave Pages Functions and Worker routes unconfigured. Pushes to that branch will rebuild the demo. In the Pages project's **Custom domains** tab, add `sleep-demo.danong.dev`; Cloudflare will provide the DNS setup for the subdomain. This public project should not have `TOKEN_KEY`, Durable Object bindings, or Cloudflare Access attached. The private Worker at `sleep.danong.dev` remains separately deployed and Access protected.
-
-Cloudflare's [Pages Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/) documents the build settings, and [custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/) documents the subdomain setup.
-
 ## Deploy
 
 Run `npm run deploy` from the repository root. `wrangler.jsonc` deploys the `eight-sleep-control` Worker with `CONTROL_ENABLED=true` and the existing `SchedulerObject` binding. Moving the source to the repository root does not create a new Worker or move its remote Durable Object data.

@@ -522,11 +522,6 @@ footer {
   color: #a2ebd4;
   border: 1px solid #286451;
 }
-.demo-notice {
-  background: #25213d;
-  border: 1px solid #514576;
-  color: #ded5ff;
-}
 .notice[hidden] {
   display: none;
 }

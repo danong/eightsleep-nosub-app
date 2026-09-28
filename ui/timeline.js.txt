@@ -25,6 +25,8 @@ export function renderTimeline(status, settings) {
   const nowLabel = document.querySelector("#timeline-now");
   const preheatLabel = document.querySelector("#preheat-time");
   const activityBox = document.querySelector("#activity");
+  const resizeKey = "timelineResizeHandler";
+  if (chart[resizeKey]) window.removeEventListener("resize", chart[resizeKey]);
   chart.replaceChildren();
   nowLabel.hidden = true;
   renderActivity(status?.activity, timeline?.timezone || settings?.timezone || "UTC");
@@ -87,12 +89,16 @@ export function renderTimeline(status, settings) {
   low -= Math.max(0.5, span * 0.24);
   high += Math.max(0.5, span * 0.24);
   const offLevel = low - Math.max(1.2, (high - low) * 0.24);
-  const width = 760,
-    height = 260,
-    left = 50,
-    right = 12,
+  // Unhide before measuring so the SVG's coordinate system matches its actual
+  // available width, including on the first render after an empty state.
+  panel.hidden = false;
+  const measuredWidth = chart.clientWidth;
+  const width = measuredWidth > 0 ? measuredWidth : 760;
+  const height = 300,
+    left = width < 380 ? 38 : 48,
+    right = 10,
     top = 18,
-    bottom = 56;
+    bottom = 100;
   const plotWidth = width - left - right,
     plotHeight = height - top - bottom;
   const x = (time) => left + ((time - minTime) / (maxTime - minTime)) * plotWidth;
@@ -169,27 +175,35 @@ export function renderTimeline(status, settings) {
   const labelItems = meaningful.map((segment) => ({ time: segment.start, label: segment.key }));
   const lastSleepPhase = meaningful.at(-1);
   if (lastSleepPhase) labelItems.push({ time: lastSleepPhase.end, label: "Wake" });
-  for (const item of labelItems) {
+  for (const [index, item] of labelItems.entries()) {
     const xx = x(item.time);
-    const anchor = xx < left + 35 ? "start" : xx > width - right - 35 ? "end" : "middle";
+    const anchor = xx < left + 30 ? "start" : xx > width - right - 30 ? "end" : "middle";
+    const labelX = anchor === "start" ? left + 2 : anchor === "end" ? width - right - 2 : xx;
+    const labelY = height - 82 + (index % 3) * 24;
     const label = make("text", {
-      x: xx,
-      y: height - 26,
+      x: labelX,
+      y: labelY,
       "text-anchor": anchor,
       class: "timeline-axis timeline-change-label",
     });
-    const name = make("tspan", { x: xx, dy: 0 });
+    const name = make("tspan", { x: labelX, dy: 0 });
     name.textContent =
       item.label === "middle"
-        ? "Mid sleep"
+        ? width < 440
+          ? "Mid"
+          : "Mid sleep"
         : item.label === "early"
-          ? "Early sleep"
+          ? width < 440
+            ? "Early"
+            : "Early sleep"
           : item.label === "late"
-            ? "Late sleep"
+            ? width < 440
+              ? "Late"
+              : "Late sleep"
             : item.label === "preheat"
               ? "Preheat"
               : item.label;
-    const clock = make("tspan", { x: xx, dy: 14 });
+    const clock = make("tspan", { x: labelX, dy: 14 });
     clock.textContent = formatClock(item.time, timezone);
     label.append(name, clock);
     svg.append(
@@ -197,7 +211,7 @@ export function renderTimeline(status, settings) {
         x1: xx,
         x2: xx,
         y1: top + plotHeight,
-        y2: height - 48,
+        y2: labelY - 8,
         class: "timeline-change-tick",
       }),
       label,
@@ -264,6 +278,12 @@ export function renderTimeline(status, settings) {
   }
   chart.append(svg);
   panel.hidden = false;
+  let resizeTimer;
+  chart[resizeKey] = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => renderTimeline(status, settings), 80);
+  };
+  window.addEventListener("resize", chart[resizeKey]);
 }
 
 function renderActivity(entries, timezone) {

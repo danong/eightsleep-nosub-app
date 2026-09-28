@@ -265,7 +265,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 .timeline-chart {
   width: 100%;
-  overflow-x: auto;
+  overflow: hidden;
   overflow-y: hidden;
   border: 1px solid #27313e;
   border-radius: 12px;
@@ -274,10 +274,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .timeline-svg {
   display: block;
   width: 100%;
-  min-width: 760px;
   height: auto;
-  min-height: 150px;
-  touch-action: auto;
+  touch-action: pan-y;
   outline: none;
   cursor: crosshair;
 }

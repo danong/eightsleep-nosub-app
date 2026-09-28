@@ -1,6 +1,6 @@
 # Nightshift
 
-A WebApp that allows users to schedule an Eight Sleep Pod without an Eight Sleep subscription. 
+A WebApp that allows users to schedule an Eight Sleep Pod without an Eight Sleep subscription.
 
 <img src="nightshift.png" alt="Nightshift Screenshot">
 
@@ -13,6 +13,14 @@ This runs on Cloudflare's free tier. Cloudflare Access identifies each user. One
 Use Node 24 or later. Run `npm ci`, `npm test`, and `npm run typecheck` from the repository root. For local development, create `.dev.vars` with a **development-only** 64-character hex `TOKEN_KEY` (for example, `openssl rand -hex 32`), then run `npm run dev` and open `http://localhost:8787`. Wrangler supplies the local Access identity `local@example.invalid`. The dev script forces `CONTROL_ENABLED=false`, so local alarms do not control the bed.
 
 Wrangler stores local Durable Object data in `.wrangler/`. Both `.dev.vars` and `.wrangler/` are ignored by Git.
+
+## Public demo
+
+Run `npm run build:demo` to generate `dist-demo/` from the shared `ui/` files. The output contains only static files. Its demo mode shows the unconnected interface, lets visitors explore the schedule controls locally, and disables saving and account connection. It makes no API requests, includes no account data, and has a static Content Security Policy that blocks network connections and form submissions. The generated directory is ignored by Git.
+
+To publish at `sleep-demo.danong.dev`, create a separate **Cloudflare Pages** project connected to this Git repository. Choose no framework preset, the repository root as the root directory, `npm run build:demo` as the build command, and `dist-demo` as the output directory. Set `NODE_VERSION` to `24` or later. Select the production branch used for this repository and leave Pages Functions and Worker routes unconfigured. Pushes to that branch will rebuild the demo. In the Pages project's **Custom domains** tab, add `sleep-demo.danong.dev`; Cloudflare will provide the DNS setup for the subdomain. This public project should not have `TOKEN_KEY`, Durable Object bindings, or Cloudflare Access attached. The private Worker at `sleep.danong.dev` remains separately deployed and Access protected.
+
+Cloudflare's [Pages Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/) documents the build settings, and [custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/) documents the subdomain setup.
 
 ## Deploy
 
@@ -32,5 +40,6 @@ To stop bed control, set `CONTROL_ENABLED` to `false` in `wrangler.jsonc` and de
 - `worker/schedule/`: phase and manual override calculations.
 - `worker/eight/`: Eight Sleep HTTP client.
 - `ui/`: mobile settings page, schedule chart, and recent activity.
+- `scripts/build-demo.mjs`: static Pages output built from `ui/`.
 
-UI assets are served through the Worker so every request passes the Access identity check.
+The private UI assets are served through the Worker so every private request passes the Access identity check. The public demo is a separate static Pages site.

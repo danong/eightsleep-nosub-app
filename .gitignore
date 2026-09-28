@@ -5,6 +5,7 @@
 /.env
 /.env*.local
 /coverage/
+/dist-demo/
 *.tsbuildinfo
 .DS_Store
 *.pem

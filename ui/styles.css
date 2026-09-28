@@ -136,6 +136,10 @@ body {
 .stepper button:active {
   transform: scale(0.97);
 }
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .button:focus-visible,
 .stepper button:focus-visible,
 input:focus-visible,
@@ -517,6 +521,11 @@ footer {
   background: #15372f;
   color: #a2ebd4;
   border: 1px solid #286451;
+}
+.demo-notice {
+  background: #25213d;
+  border: 1px solid #514576;
+  color: #ded5ff;
 }
 .notice[hidden] {
   display: none;

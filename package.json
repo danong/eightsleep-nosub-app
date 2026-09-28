@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --var CONTROL_ENABLED:false",
-    "test": "node --experimental-strip-types --test worker/activity.test.ts worker/schedule/engine.test.ts worker/eight/client.test.ts worker/secrets.test.ts worker/http/validation.test.ts worker/scheduler-timing.test.ts",
+    "test": "node --experimental-strip-types --test worker/activity.test.ts worker/schedule/engine.test.ts worker/eight/client.test.ts worker/secrets.test.ts worker/http/validation.test.ts worker/scheduler-timing.test.ts scripts/build-demo.test.mjs",
     "typecheck": "tsc --noEmit",
+    "build:demo": "node scripts/build-demo.mjs",
     "format": "prettier --write 'worker/**/*.ts' ui/index.html ui/styles.css && prettier --write 'ui/*.js.txt' --parser babel",
     "deploy": "wrangler deploy"
   },

@@ -1,5 +1,6 @@
 import { renderTimeline } from "/timeline.js";
 
+const demoMode = document.documentElement.dataset.demo === "true";
 const form = document.querySelector("#settings-form");
 const notice = document.querySelector("#notice");
 const runError = document.querySelector("#run-error");
@@ -21,6 +22,7 @@ function setNotice(message, kind = "success") {
 }
 
 async function request(path, options = {}) {
+  if (demoMode) throw new Error("API requests are disabled in the public demo");
   const response = await fetch(path, {
     ...options,
     headers: { "content-type": "application/json", ...options.headers },
@@ -124,6 +126,20 @@ function renderStatus(status) {
 
 async function load() {
   setOptions(document.querySelector("#timezone"));
+  if (demoMode) {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (timezone) document.querySelector("#timezone").value = timezone;
+    document.querySelector("#demo-notice").hidden = false;
+    document.querySelector("#status-value").textContent = "Public demo";
+    document.querySelector("#status-detail").textContent = "Explore the schedule layout below.";
+    document.querySelector("#account-detail").textContent =
+      "Account connection is unavailable in the demo.";
+    document.querySelector("#save-hint").textContent = "Changes cannot be saved in this demo.";
+    saveButton.disabled = true;
+    connectButton.disabled = true;
+    connectButton.textContent = "Unavailable in demo";
+    return;
+  }
   try {
     const [status, value] = await Promise.all([request("/api/status"), request("/api/settings")]);
     renderStatus(status);
@@ -147,6 +163,7 @@ for (const button of document.querySelectorAll("[data-step]")) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (demoMode) return;
   const data = new FormData(form);
   const payload = {
     bedtime: data.get("bedtime"),
@@ -175,6 +192,7 @@ form.addEventListener("submit", async (event) => {
 });
 
 pauseButton.addEventListener("click", async () => {
+  if (demoMode) return;
   pauseButton.disabled = true;
   try {
     const result = await request("/api/control", {
@@ -194,38 +212,40 @@ pauseButton.addEventListener("click", async () => {
   }
 });
 
-connectButton.addEventListener("click", () => {
-  connectError.hidden = true;
-  connectForm.reset();
-  connectDialog.showModal();
-});
-document.querySelector("#close-dialog").addEventListener("click", () => connectDialog.close());
-connectForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const submit = document.querySelector("#connect-submit");
-  submit.disabled = true;
-  submit.textContent = "Connecting…";
-  connectError.hidden = true;
-  try {
-    await request("/api/connect", {
-      method: "POST",
-      body: JSON.stringify({
-        email: document.querySelector("#email").value,
-        password: document.querySelector("#password").value,
-      }),
-    });
-    connectDialog.close();
-    setNotice("Eight Sleep connected successfully.");
-    await load();
-  } catch (error) {
-    connectError.textContent =
-      error.message || "Could not connect. Check your details and try again.";
-    connectError.hidden = false;
-  } finally {
-    submit.disabled = false;
-    submit.textContent = "Connect";
-  }
-});
+if (!demoMode) {
+  connectButton.addEventListener("click", () => {
+    connectError.hidden = true;
+    connectForm.reset();
+    connectDialog.showModal();
+  });
+  document.querySelector("#close-dialog").addEventListener("click", () => connectDialog.close());
+  connectForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.querySelector("#connect-submit");
+    submit.disabled = true;
+    submit.textContent = "Connecting…";
+    connectError.hidden = true;
+    try {
+      await request("/api/connect", {
+        method: "POST",
+        body: JSON.stringify({
+          email: document.querySelector("#email").value,
+          password: document.querySelector("#password").value,
+        }),
+      });
+      connectDialog.close();
+      setNotice("Eight Sleep connected successfully.");
+      await load();
+    } catch (error) {
+      connectError.textContent =
+        error.message || "Could not connect. Check your details and try again.";
+      connectError.hidden = false;
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Connect";
+    }
+  });
+}
 
 load();
 window.setInterval(() => renderTimeline(currentStatus, settings), 60_000);

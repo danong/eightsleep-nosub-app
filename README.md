@@ -8,6 +8,12 @@ Each user chooses a bedtime, wake time, time zone, and early, middle, and late l
 
 This runs on Cloudflare's free tier. Cloudflare Access identifies each user. One SQLite-backed Durable Object stores both users' settings and encrypted Eight Sleep tokens, and its alarm wakes at the next schedule change. The Worker serves the UI and API from this repository.
 
+## Acknowledgment
+
+Nightshift was inspired by [aerotow's Eight Sleep Control App](https://github.com/aerotow/eightsleep-nosub-app). Thanks to aerotow for showing how to schedule an Eight Sleep Pod without a subscription.
+
+The original app uses a recurring 30-minute job with Vercel, Postgres, and cron-job.org. Nightshift uses one Cloudflare Worker and a SQLite-backed Durable Object whose alarm runs at the next schedule change. It respects manual temperature changes until wake or the next preheat, and the Deploy to Cloudflare flow removes the separate database and cron service setup.
+
 ## Develop
 
 Use Node 24 or later. Run `npm ci`, `npm test`, and `npm run typecheck` from the repository root. For local development, create `.dev.vars` with a **development-only** 64-character hex `TOKEN_KEY` (for example, `openssl rand -hex 32`), then run `npm run dev` and open `http://localhost:8787`. Wrangler supplies the local Access identity `local@example.invalid`. The dev script forces `CONTROL_ENABLED=false`, so local alarms do not control the bed.
